@@ -10,22 +10,26 @@ class DisplaySlot
     struct displayslot ds;
 
 public:
-    inline DisplySlot() { displayslot_init(&ds); }
-    inline ~DisplaySlot(); { displayslot_cleanup(&ds); }
+    inline DisplaySlot() { displayslot_init(&ds); }
+    inline ~DisplaySlot() { displayslot_cleanup(&ds); }
 
     inline void rename(const char *fmt, ...) {
         va_list args; va_start(args, fmt);
-        displayslot_rename(&ds, vasprintf(fmt, args));
+        char *buf; vasprintf(&buf, fmt, args);
         va_end(args);
+        
+        displayslot_rename(&ds, buf);
     }
 
     inline void recaption(const char *fmt, ...) {
         va_list args; va_start(args, fmt);
-        displayslot_recaption(&ds, vasprintf(fmt, args));
+        char *buf; vasprintf(&buf, fmt, args);
         va_end(args);
+
+        displayslot_recaption(&ds, buf);
     }
 
-    inline void update(const Image &im) { displayslot_update(im.getWidth(), im.getHeight(), im[0]); }
+    inline void update(const Image &im) { displayslot_update(&ds, im.getWidth(), im.getHeight(), im[0]); }
 };
 
 #endif
