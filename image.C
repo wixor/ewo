@@ -1,7 +1,11 @@
-#include "image.h"
-#include <cstring>
 #include <cstdlib>
 #include <cstdio>
+#include <cstring>
+
+#include <algorithm>
+#include <stdexcept>
+
+#include "image.h"
 
 Image::Image(int w, int h)
 {
@@ -35,67 +39,76 @@ void Image::operator=(const Image &im)
     memcpy(data, im.data, width*height);
 }
 
-Image Image::readPGM(const char *filename) //Karol's
+Image Image::readPGM(FILE *file)
 {
-    FILE* file = fopen(filename, "r");
-    if (file == NULL) printf("unable to open %s\n", filename);
-    char* buf = new char[1024]; int bufsize = 1024;
-    char tmp[100];
     int width, height;
-    for (int i=0;;)
-    {
-        getline(&buf, (size_t*)&bufsize, file);
-        if (buf[0] == '#') continue;
-        if (i == 0) ;
-        else if (i == 1) sscanf(buf, "%d %d", &width, &height);
-        else if (i == 2) break;
-        i ++;
+    if(fscanf(file, "P5 %d %d 255%*c", &width, &height) != 2)
+        throw std::runtime_error("malformed pgm");
+
+    Image ret(width, height);
+    if(fread(file, width*height, 1, file) != 1) 
+        throw std::runtime_error("malformed pgm");
+
+    return ret;
+}
+Image Image::readPGM(const char *filename)
+{
+    FILE *file = fopen(filename, "rb");
+    
+    if(file == NULL)
+        throw std::runtime_error("failed to open file");
+
+    try {
+        Image im = readPGM(file);
+        fclose(file);
+        return im;
+    } catch(const std::exception &e) {
+        fclose(file);
+        throw e;
     }
-    
-    // fprintf(stderr, "%d %d\n", width, height);
-    Image* ret = new Image(width, height);
-    for (int i=0; i<height; i++)
-        for  (int j=0; j<width; j++)
-            fscanf(file, "%c", &(*ret)[i][j]);
-    
-    return *ret;
 }
 
 void Image::writePGM(FILE* file) const
 {
     fprintf(file, "P5\n%d %d\n255\n", width, height);
-    for (int i=0; i<height; i++)
-        for  (int j=0; j<width; j++)
-            fprintf(file, "%c", data[i*width+j]);
+    fwrite(data, width*height, 1, file);
 }
-
-/* Karol's part */
+void Image::writePGM(const char *filename) const
+{
+    FILE *f = fopen(filename, "wb");
+    if(f == NULL)
+        throw std::runtime_error("failed to open file");
+    writePGM(f);
+    fclose(f);
+}
 
 void Image::move(int dw, int dh)
 {
-    uint8_t* newdata = new uint8_t[width*height];
+    Image tmp(width, height);
+
     for (int i=0; i<height; i++)
         for (int j=0; j<width; j++)
-        {
-            int ind = width*(i-dh) + j-dw;
-            newdata[i*width+j] = i-dh >= 0 && j-dw >=0 && i-dh < height && j-dw < width ? data[ind] : 0;
-        }
-    memcpy(data, newdata, width*height);
+            tmp[i][j] = 
+                i-dh >= 0 && j-dw >=0 && i-dh < height && j-dw < width
+                    ? (*this)[i-dh][j-dw]
+                    : 0;
+
+    (*this) = tmp;
 }
 
 void Image::randomInit()
 {
     for (int i=0; i<height; i++)
         for (int j=0; j<width; j++)
-            data[i*width+j] = rand()&255;
+            (*this)[i][j] = rand()&255;
 }
 
-Image &Image::difference(const Image& im) const //wartość bezwzględna różnicy między dwoma obrazkami, pixel po pixelu
+Image Image::difference(const Image& im) const //wartość bezwzględna różnicy między dwoma obrazkami, pixel po pixelu
 {
-    Image* ret = new Image(*this);
+    Image ret(width, height);
     for (int i=0; i<height; i++) 
         for (int j=0; j<width; j++)
-            (*ret)[i][j] = (uint8_t)abs((*ret)[i][j] , im[i][j]);
-    return *ret;
+            ret[i][j] = std::abs((int)(*this)[i][j] - (int)im[i][j]);
+    return ret;
 }
     
