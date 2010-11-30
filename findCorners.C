@@ -19,7 +19,7 @@ edgePoint findEdgeKarol(const Image& img, int x, int y, int W, int H, int epsilo
 {
     /* najpierw zmaksymalizujemy średnią wartość piksela po obu stronach prostych */
     int maxsharp = 0, maxangle = -1;
-    uint sumall = 0, cntall = (2*range+1)*(2*range+1);
+    int sumall = 0, cntall = (2*range+1)*(2*range+1);
     for (int dy=-range; dy<=range; dy++)
         for (int dx=-range; dx<=range; dx++)
             sumall += (uint)img[y+dy][x+dx];
@@ -29,7 +29,7 @@ edgePoint findEdgeKarol(const Image& img, int x, int y, int W, int H, int epsilo
         for (int L2 = L1+1; L2 < prec; L2 ++) //jak wyżej. prec odpowiada 90stopniom
         {
             /* liczymy ilość oraz, na pałę, sumę pikseli z danego obszaru */
-            uint sum[4] = {0,0,0,0}, cnt[4] = {0,0,0,0}; //proste dzielą to na 4 obszary
+            int sum[4] = {0,0,0,0}, cnt[4] = {0,0,0,0}; //proste dzielą to na 4 obszary
             for (int tx = x-range; tx <= x+range; tx ++) 
                 for (int ty=y-range; ty <= y+range; ty++)
                 {
@@ -43,12 +43,12 @@ edgePoint findEdgeKarol(const Image& img, int x, int y, int W, int H, int epsilo
             // printf("x=%d, y=%d, L1=%d, L2=%d. (%d,%d) (%d %d) (%d %d) (%d %d)\n", x,y,L1,L2,cnt[0],sum[0],cnt[1],sum[1],cnt[2],sum[2],cnt[3],sum[3]);
             for (int i=0; i<4; i++)
             {
-                int sharp = Image::abs(sum[i]/cnt[i], (sumall-sum[i])/(cntall-cnt[i])) * 5; // KAROL
+                int sharp = std::abs((int)sum[i]/cnt[i] - (int)(sumall-sum[i])/(cntall-cnt[i])) * 5; // KAROL
                 // int sharp = (int)Image::abs(sum[i], cntall-sum[i])*255/cntall; //WIXOR
                 // int sharp = sum[i] == 0 ? 255 : (sum[i] == cntall ? 255 : 0); //WIXOR
                 if (maxsharp < sharp)
                     maxsharp = sharp,
-                    maxangle = (i==1||i==2 ? Image::abs(L1,L2)*90/prec : 180-Image::abs(L1,L2)*90/prec);
+                    maxangle = (i==1||i==2 ? std::abs((int)L1-L2)*90/prec : 180-std::abs((int)L1-L2)*90/prec);
             }
         }
     
@@ -66,8 +66,8 @@ vector<edgePoint> findEdgePoints(const Image &img,
     contrastImg = img;
     vector<edgePoint> retvec;
     int W = img.getWidth(), H = img.getHeight();
-    for (int i=range; i<H-range; i++)
-        for (int j=range, pr = fprintf(stderr, "%d\n", i); j<W-range; j++)
+    for (int i=printf("i= %d\n", i), range; i<H-range; i++)
+        for (int j=range; j<W-range; j++)
         {
             /* tutaj się zaczyna zabawa */
             /* najpierw sposób wixora: 
@@ -78,28 +78,15 @@ vector<edgePoint> findEdgePoints(const Image &img,
             if (i%3 != 0 || j%3 != 0) { contrastImg[i][j] = 0; continue; }
             edgePoint tmp = findEdgeKarol(img, j, i, W, H, epsilon, range, prec); //NIE DZIALA
             retvec.push_back(tmp);
-            contrastImg[i][j] = tmp.sharpness > 200 ? 255-Image::abs(tmp.angle,90)*255/180 : 0;
+            contrastImg[i][j] = tmp.sharpness > 200 ? 255-std::abs((int)tmp.angle-90)*255/180 : 0;
         }
     return retvec;
 }
 int main()
 {
-    Image img(70, 120);
-    
-    Image portret = Image::readPGM("gallery/portret.pgm");
-    portret.contour().writePGM("portretContour.pgm");
-    
-    Image aa1 = Image::readPGM("gallery/aa1.pgm");
-    aa1.contour().writePGM("aa1Contour.pgm");
-    
-    Image portretContrast(0,0);
-    findEdgePoints(portret, portretContrast);
-    portretContrast.writePGM("portretContrast.pgm");
-    
-    Image aa1Contrast(0,0);
-    findEdgePoints(aa1, aa1Contrast);
-    aa1Contrast.writePGM("aa1Contrast.pgm");
-    
+    Image grape = Image::readPGM("gallery/grape.pgm");
+    printf("opened\n");
+    grape.contour().writePGM("gallery/grapeC.pgm");
     
     return 0;
 }

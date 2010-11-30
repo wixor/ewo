@@ -46,7 +46,7 @@ Image Image::readPGM(FILE *file)
         throw std::runtime_error("malformed pgm");
 
     Image ret(width, height);
-    if(fread(file, width*height, 1, file) != 1) 
+    if(fread(ret.data, width*height, 1, file) != 1) 
         throw std::runtime_error("malformed pgm");
 
     return ret;
