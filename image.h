@@ -1,3 +1,6 @@
+#ifndef __IMAGE_H__
+#define __IMAGE_H__
+
 #include <stdint.h>
 #include <cstring>
 #include <cstdio>
@@ -27,7 +30,6 @@ public:
     void writePGM(FILE* file) const;
     void writePGM(const char* filename) const;
     
-    /* Karol's */
     void move(int dw, int dh); //very not const
     void randomInit(); //very not const
     Image difference(const Image& im) const;
@@ -36,3 +38,4 @@ public:
     
 };
 
+#endif
