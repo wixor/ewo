@@ -82,6 +82,11 @@ void Image::writePGM(const char *filename) const
     fclose(f);
 }
 
+void Image::fill(uint8_t with)
+{
+    memset(data, with, width*height);
+}
+
 void Image::move(int dw, int dh)
 {
     Image tmp(width, height);

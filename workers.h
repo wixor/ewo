@@ -1,3 +1,6 @@
+#ifndef __WORKERS_H__
+#define __WORKERS_H__
+
 #include <pthread.h>
 
 class Completion
@@ -17,11 +20,13 @@ public:
 
 class AsyncJob
 {
-public:
+    friend class AsyncQueue;
     AsyncJob *next;
+
+public:
     Completion *completion;
 
-    virtual ~AsyncJob() { }
+    virtual ~AsyncJob();
     virtual void run() = 0;
 };
 
@@ -51,3 +56,4 @@ public:
     void run();
 };
 
+#endif

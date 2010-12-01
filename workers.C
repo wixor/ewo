@@ -40,6 +40,11 @@ void Completion::wait(void)
 
 /* ----------------------------------------------------------------------- */
 
+AsyncJob::~AsyncJob(void)
+{
+    /* empty */
+}
+
 AsyncQueue::AsyncQueue(void)
 {
     pthread_mutex_init(&mutex, NULL);
@@ -109,65 +114,3 @@ void WorkerThread::run(void)
         job->completion->completed();
     }
 }
-
-/* ------------------------------------------------------------------------- */
-
-class FibJob : public AsyncJob
-{
-    public:
-        int n, m;
-        int ans;
-
-        FibJob(int n, int m);
-        virtual void run();
-};
-
-FibJob::FibJob(int n, int m) {
-    this->n = n; this->m = m;
-}
-
-void FibJob::run(void)
-{
-    printf("starting, n = %d\n", n);
-    int a=0, b=1, c;
-    for(int i=0; i<n; i++) {
-        c = (a + b) % m;
-        a =b;
-        b =c;
-    }
-    ans = a;
-    printf("finished, n = %d\n", n);
-}
-
-int main(void)
-{
-    AsyncQueue *q = new AsyncQueue();
-
-    WorkerThread *threads[4];
-    for(int i=0; i<4; i++) {
-        threads[i] = new WorkerThread(q);
-        threads[i]->start();
-    }
-
-    Completion c;
-    FibJob *jobs[10];
-
-    for(int i=0; i<10; i++) {
-        jobs[i] = new FibJob((i+1)*10000000, 43246731);
-        jobs[i]->completion = &c;
-    }
-
-    for(int i=0; i<10; i++)
-        q->queue(jobs[i]);
-
-    c.wait();
-
-    for(int i=0; i<10; i++) {
-        printf("answer from %d: %d\n", i, jobs[i]->ans);
-        delete jobs[i];
-    }
-
-    return 0;
-}
-
-

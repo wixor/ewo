@@ -29,6 +29,8 @@ public:
     static Image readPGM(const char *filename);
     void writePGM(FILE* file) const;
     void writePGM(const char* filename) const;
+
+    void fill(uint8_t with);
     
     void move(int dw, int dh); //very not const
     void randomInit(); //very not const
