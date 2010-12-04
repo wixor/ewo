@@ -7,26 +7,25 @@
 
 #include "image.h"
 
-Image::Image(int w, int h)
+/* function definitions for ImageBase class */
+
+template <typename T> ImageBase<T>::ImageBase(int w, int h)
 {
     width = w;
     height = h;
-    data = new uint8_t[width*height];
+    data = new T[width*height];
 }
 
-Image::Image(const Image &im)
+
+template <typename T> ImageBase<T>::ImageBase(const ImageBase<T> &im)
 {
     width = im.width;
     height = im.height;
-    data = new uint8_t[width*height];
-    memcpy(data, im.data, width*height);
+    data = new T[width*height];
+    memcpy(data, im.data, width*height*sizeof(T));
 }
 
-Image::~Image() {
-    delete data;
-}
-
-void Image::operator=(const Image &im)
+template <typename T> void ImageBase<T>::operator=(const ImageBase<T> &im)
 {
     if(width != im.width || height != im.height)
     {
@@ -34,10 +33,12 @@ void Image::operator=(const Image &im)
         height = im.height;
 
         delete data;
-        data = new uint8_t[width*height];
+        data = new T[width*height];
     }
-    memcpy(data, im.data, width*height);
+    memcpy(data, im.data, width*height*sizeof(T));
 }
+
+/* function definitions for Image class */
 
 Image Image::readPGM(FILE *file)
 {
@@ -51,6 +52,7 @@ Image Image::readPGM(FILE *file)
 
     return ret;
 }
+
 Image Image::readPGM(const char *filename)
 {
     FILE *file = fopen(filename, "rb");
@@ -68,6 +70,11 @@ Image Image::readPGM(const char *filename)
     }
 }
 
+void Image::fill(uint8_t with)
+{
+    memset(data, with, width*height);
+}
+
 void Image::writePGM(FILE* file) const
 {
     fprintf(file, "P5\n%d %d\n255\n", width, height);
@@ -80,11 +87,6 @@ void Image::writePGM(const char *filename) const
         throw std::runtime_error("failed to open file");
     writePGM(f);
     fclose(f);
-}
-
-void Image::fill(uint8_t with)
-{
-    memset(data, with, width*height);
 }
 
 void Image::move(int dw, int dh)
