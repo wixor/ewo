@@ -59,7 +59,6 @@ void DifferenceJob::run()
     int border_x = std::max(std::abs(dx), std::abs(dx+1)),
         border_y = std::max(std::abs(dy), std::abs(dy+1));
 
-
     assert(w0+w1+w2+w3 >= 0.99 && w0+w1+w2+w3 <= 1.01);
     assert(src->getWidth()  == dst->getWidth() &&
            src->getHeight() == dst->getHeight());
@@ -81,6 +80,7 @@ void DifferenceJob::run()
             (*dst)[y][x] = std::max(std::min(valint, 255), 1);
         }
 }
+
 
 int main(int argc, char *argv[])
 {
@@ -105,12 +105,11 @@ int main(int argc, char *argv[])
 
     orig_ds.update(src);
 
-
     Image dst(src.getWidth(), src.getHeight());
     DifferenceJob job;
     job.src = &src;
     job.dst = &dst;
-
+    
     for(int i=0; ; i = (i==steps-1 ? 0 : i+1))
     {
         double angle = 2.0*M_PI / (double)steps * (double)i;
