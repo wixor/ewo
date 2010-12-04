@@ -9,35 +9,6 @@
 
 /* function definitions for ImageBase class */
 
-template <typename T> ImageBase<T>::ImageBase(int w, int h)
-{
-    width = w;
-    height = h;
-    data = new T[width*height];
-}
-
-
-template <typename T> ImageBase<T>::ImageBase(const ImageBase<T> &im)
-{
-    width = im.width;
-    height = im.height;
-    data = new T[width*height];
-    memcpy(data, im.data, width*height*sizeof(T));
-}
-
-template <typename T> void ImageBase<T>::operator=(const ImageBase<T> &im)
-{
-    if(width != im.width || height != im.height)
-    {
-        width = im.width;
-        height = im.height;
-
-        delete data;
-        data = new T[width*height];
-    }
-    memcpy(data, im.data, width*height*sizeof(T));
-}
-
 /* function definitions for Image class */
 
 Image Image::readPGM(FILE *file)
@@ -68,11 +39,6 @@ Image Image::readPGM(const char *filename)
         fclose(file);
         throw e;
     }
-}
-
-void Image::fill(uint8_t with)
-{
-    memset(data, with, width*height);
 }
 
 void Image::writePGM(FILE* file) const
