@@ -5,30 +5,33 @@
 #include <cstring>
 #include <cstdio>
 
-template <typename T> class ImageBase
+template <typename T> class Array2D
 {
 protected:
     int width, height;
     T *data;
 public:
-    inline ImageBase(int w, int h)
+    inline Array2D(int w, int h)
     {
         width = w;
         height = h;
         data = new T[width*height];
     }
-    inline ImageBase(const ImageBase<T> &im)
+    inline Array2D(const Array2D<T> &im)
     {
         width = im.width;
         height = im.height;
         data = new T[width*height];
         memcpy(data, im.data, width*height*sizeof(T));
     }
-    virtual inline ~ImageBase() { delete data; }
+    virtual ~Array2D() {
+        delete data;
+    }
     
     inline T* operator[](int row) { return data+row*width; }
     inline const T* operator[](int row) const { return data+row*width; }
-    inline void operator=(const ImageBase<T>& im)
+
+    inline void operator=(const Array2D<T>& im)
     {
         if(width != im.width || height != im.height)
         {
@@ -46,12 +49,12 @@ public:
 };
         
 
-class Image : public ImageBase<uint8_t>
+class Image : public Array2D<uint8_t>
 {
 public:
     
-    Image(const Image& im) : ImageBase<uint8_t>(im) {}
-    Image(int w, int h) : ImageBase<uint8_t>(w, h) {}
+    Image(const Image& im) : Array2D<uint8_t>(im) {}
+    Image(int w, int h) : Array2D<uint8_t>(w, h) {}
     
     inline bool isOpaque(int x, int y) const { return (*this)[y][x] != 0; }
 
@@ -61,12 +64,6 @@ public:
     void writePGM(const char* filename) const;
 
     inline void fill(uint8_t with) { memset(data, with, width*height); }
-    
-    void move(int dw, int dh); //very not const
-    void randomInit(); //very not const
-    Image difference(const Image& im) const;
-    Image contour() const { Image img2(*this); img2.move(1,1); return this->difference(img2); }
-    static Image contour(const char* filename) { return readPGM(filename).contour(); }
 };
 
 #endif

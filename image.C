@@ -7,10 +7,6 @@
 
 #include "image.h"
 
-/* function definitions for ImageBase class */
-
-/* function definitions for Image class */
-
 Image Image::readPGM(FILE *file)
 {
     int width, height;
@@ -55,6 +51,8 @@ void Image::writePGM(const char *filename) const
     fclose(f);
 }
 
+#if 0
+
 void Image::move(int dw, int dh)
 {
     Image tmp(width, height);
@@ -84,4 +82,5 @@ Image Image::difference(const Image& im) const //wartość bezwzględna różnic
             ret[i][j] = std::abs((int)(*this)[i][j] - (int)im[i][j]);
     return ret;
 }
-    
+
+#endif
