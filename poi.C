@@ -3,30 +3,15 @@
 #include <cassert>
 #include <unistd.h>
 #include <algorithm>
+#include <vector>
 
 #include "image.h"
 #include "gui.h"
 #include "workers.h"
 
-struct rect
-{
-    double x1,y1,x2,y2;
+//FILE* output = fopen("output.plot", "w");
 
-    inline rect() { }
-    inline rect(double x1, double y1, double x2, double y2) : x1(x1), y1(y1), x2(x2), y2(y2) { }
-
-    static rect unitAt(double x1, double y1) {
-        return rect(x1,y1,x1+1,y1+1);
-    }
-
-    inline rect intersect(const rect &r) const {
-        return rect(std::max(x1, r.x1), std::max(y1, r.y1),
-                    std::min(x2, r.x2), std::min(y2, r.y2));
-    }
-    inline double area() const {
-        return std::abs(x2-x1) * std::abs(y2-y1);
-    }
-};
+static int to255(double x) { return std::max(0, std::min(255, (int)round(x))); }
 
 template <typename T> struct pair {
     T fi, se;
@@ -48,6 +33,22 @@ zatem chcąc policzyć jakaś wlasność pixela (x,y) (lub, ogólniej: kwadratu 
 liczymy tę własność prostokąta (x+1/2-K/2,x+1/2+K/2, ...)
 */
 
+struct RawProfile
+{
+    double tab[32];
+    int steps;
+    inline RawProfile() { steps = 32; memset(tab, 0, 32*sizeof(double)); }
+    inline double& operator[](int i) { return tab[i]; }
+    int interesting() /* tu określamy, w skali powiedzmy 0-255, interesującość funkcji */
+    {
+        double maxv = -1000, minv = 1000;
+        for (int i=0; i<steps; i++) 
+            maxv = std::max(maxv, tab[i]),
+            minv = std::min(minv, tab[i]);
+        return to255(fabs(maxv-minv));
+    }
+};
+
 class DifferenceJob : public AsyncJob
 {
     ImageBase<int> *prep;
@@ -66,9 +67,15 @@ class DifferenceJob : public AsyncJob
 public:
     const Image *src;
     Image *dst;
+    ImageBase<RawProfile> *pointData;
+    
     double dx, dy;
     double scale;
 
+    int currstep;
+    bool filled;
+
+    DifferenceJob() { filled = false; currstep = 0; }
     virtual ~DifferenceJob();
     virtual void run();
     
@@ -98,11 +105,23 @@ void DifferenceJob::run()
     for(int y = border_y; y < h - border_y; y++)
         for(int x = border_x; x < w - border_x; x++) //per pixel
         {
-            double val = 0.0
-                + avgField(0.5+x-scale/2.0, 0.5+x+scale/2.0, 0.5+y-scale/2.0, 0.5+y+scale/2.0) //per coord
-                - avgField(0.5+x+dx-scale/2.0, 0.5+x+dx+scale/2.0, 0.5+y+dy-scale/2.0, 0.5+y+dy+scale/2.0); //per coord
-            
-            int valint = (int)round(fabs(val));
+            int valint;
+            if (!filled) 
+            {
+                double val =
+                    + avgField(0.5+x-scale/2.0, 0.5+x+scale/2.0, 0.5+y-scale/2.0, 0.5+y+scale/2.0) //per coord
+                    - avgField(0.5+x+dx-scale/2.0, 0.5+x+dx+scale/2.0, 0.5+y+dy-scale/2.0, 0.5+y+dy+scale/2.0); //per coord
+                
+                (*pointData)[y][x][currstep] = val;
+                (*pointData)[y][x].steps = currstep+1;
+                
+                valint = (int)round(fabs(val));
+            }
+            else
+            {
+                // valint = (int)round(fabs((*pointData)[y][x][currstep]));
+                valint = (*pointData)[y][x].interesting();
+            }
             (*dst)[y][x] = std::max(std::min(valint, 255), 1); //per pixel
         }
 }
@@ -170,26 +189,73 @@ int main(int argc, char *argv[])
 
     orig_ds.rename("original image");
     orig_ds.recaption("");
-    
     diff_ds.rename("difference image");
     diff_ds.recaption("");
-
     orig_ds.update(src);
     
-    Image dst(src.getWidth(), src.getHeight());
+    int nScales = 5;
+    const int scales[] = {1,3,5,7,10};
+    
+    int w = src.getWidth(), h = src.getHeight();
+    Image dst(w, h);
+    std::vector<ImageBase<RawProfile> > profiles(nScales, ImageBase<RawProfile>(w,h));
+
     DifferenceJob job;
     job.src = &src;
     job.dst = &dst;
-    job.scale = scale;
-    
     job.makeSumPref();
+    
+    for(int scaleidx = 0; scaleidx < nScales; scaleidx++)
+    {
+        printf("scale %d...\n", scales[scaleidx]);
+        job.scale = scales[scaleidx];
+        job.pointData = &profiles[scaleidx];
+        
+        for(int i=0; i<steps; i++) {
+            printf("  step %d\n", i);
+            double angle = 2*M_PI/steps*i;
+            job.dx = radius*cos(angle);
+            job.dy = radius*sin(angle);
+            job.currstep = i;
+            job.run();
+            diff_ds.update(dst);
+        }
+    }
+    
+    dst.fill(0);
+    for(int y=15; y<h-15; y++)
+        for(int x=20; x<w-20; x++)
+        {
+            double minv = 1000000, maxv = -1000000;
+            for(int i=0; i<steps; i++)
+            {
+                double v = 1;
+                for(int s=0; s<nScales; s++)
+                    v *= profiles[s][y][x][i];
+                minv = std::min(minv, v);
+                maxv = std::max(maxv, v);
+            }            
+            
+            dst[y][x] = to255(pow(maxv-minv, 0.2));
+        }
+        
+    dst.writePGM("output.pgm");
+        
+    
+    
+#if 0
+    job.pointData = new ImageBase<RawProfile>(w, h);
+    
+    
     
     for(int i=0; ; i = (i==steps-1 ? 0 : i+1))
     {
+        
         double angle = 2.0*M_PI / (double)steps * (double)i;
 
         job.dx = radius*cos(angle);
         job.dy = radius*sin(angle);
+        job.currstep = i;
         job.run();
 
         diff_ds.update(dst);
@@ -197,7 +263,24 @@ int main(int argc, char *argv[])
                           (int)round(angle/M_PI*180.0), radius, job.dx, job.dy);
 
         usleep(1000000 / steps);
+        
+        if (!job.filled && job.currstep == steps-1)
+        {
+            job.filled = true;
+            for (int x=0; x<src.getWidth(); x++)
+                for (int y=0; y<src.getHeight(); y++)
+                {
+                    RawProfile& P = (*job.pointData)[y][x];
+                    if (P.interesting() < 50) continue;
+                    fprintf(output, "%d %d ", x, y);
+                    for (int k=0; k<steps || !fprintf(output, "\n"); k++)
+                        fprintf(output, "%.2lf ", P[k]);
+                }
+            printf("written out!\n");
+            fclose(output);
+        }
     }
+#endif
 
     return 0;
 }
