@@ -1,9 +1,9 @@
 CC := gcc
 CXX := g++
 CFLAGS := -O2 -pthread -Wall -march=native -msse -msse2 -mfpmath=sse -std=c99
-CXXFLAGS := -O2 -pthread -Wno-unused-result -Wall -march=native -msse -msse2 -mfpmath=sse
+CXXFLAGS := -O2 -pthread -Wno-unused-result -Wall -ffast-math -march=native -msse -msse2 -mfpmath=sse
 CFLAGS_gui-gtk := $(shell pkg-config --cflags gtk+-2.0)
-LDFLAGS := -lm -pthread
+LDFLAGS := -lm -pthread -ffast-math
 
 SRCS := image.C gui-example.C gui-gtk.c findCorners.C poi.C poi2.C
 
