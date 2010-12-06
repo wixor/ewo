@@ -56,4 +56,7 @@ public:
     void run();
 };
 
+extern AsyncQueue *aq;
+void spawn_worker_threads(int n);
+
 #endif

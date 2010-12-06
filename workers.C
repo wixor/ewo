@@ -114,3 +114,14 @@ void WorkerThread::run(void)
         job->completion->completed();
     }
 }
+
+/* ----------------------------------------------------------------------- */
+
+AsyncQueue *aq;
+
+void spawn_worker_threads(int n)
+{
+    aq = new AsyncQueue();
+    while(n--)
+        (new WorkerThread(aq))->start();
+}
