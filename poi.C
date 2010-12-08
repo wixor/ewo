@@ -1,5 +1,11 @@
-#include <queue>
+#include <cstdio>
+#include <cassert>
+#include <cmath>
+#include <vector>
+#include <algorithm>
 
+#include "workers.h"
+#include "image.h"
 #include "poi.h"
 
 #define debug(fmt, ...) fprintf(stderr, fmt, ## __VA_ARGS__)
@@ -114,15 +120,20 @@ void DifferenceJob::run()
     
 /* ------------------------------------------------------------------------ */
 
-Array2D<float> evaluateImage(const Image &src, int steps, const std::vector<float> &scales)
+static int getBorderSize(const std::vector<float> &scales)
 {
-    int w = src.getWidth(), h = src.getHeight();
-    
     float maxscale = 0;
     for(int s=0; s<(int)scales.size(); s++)
         maxscale = std::max(maxscale, scales[s]);
 
-    int border = (int)ceilf(2.5f*maxscale);
+    return (int)ceilf(2.5f*maxscale);
+}
+
+Array2D<float> evaluateImage(const Image &src, int steps, const std::vector<float> &scales)
+{
+    int w = src.getWidth(), h = src.getHeight();
+    
+    int border = getBorderSize(scales);
     
     std::vector<Array2D<float> > globalProfile(steps, Array2D<float>(w,h));
     std::vector<Array2D<float> > currentProfile(steps, Array2D<float>(w,h));
@@ -201,96 +212,82 @@ Image reduceEvaluationToImage(const Array2D<float> &eval)
     return ret;
 }
 
-/* ------------------------------------------------------------------------ */
-
-inline bool onBoard(int x, int y, int W, int H) { return x>=0 && x<W && y>=0 && y<H; }
-
-PoiFinder::PoiFinder(const Array2D<float> &src, int bounding = 1) //szukaj punktów napałowo
+std::vector<POI> findPOIs(const Array2D<float> &eval, int border)
 {
     const float R0 = 20.0;
     const float minimum = 20.0;
-    
-    H = src.getHeight(), W = src.getWidth();
-    
-    Array2D<char> tabu(W, H);
-    memset(tabu[0], 0, W*H);
-    
-    std::priority_queue<pnt> best;
-    
-    for (int j=bounding; j<H-bounding; j++)
-        for (int i=bounding; i<W-bounding; i++) 
-            best.push(pnt(i,j,src[j][i]));
-    
-    while (true) //kolko skalujemy od R0 do 2*R0
+
+    int w = eval.getWidth(), h = eval.getHeight();
+
+    Image tabu(w, h);
+    tabu.fill(0);
+
+    std::vector<POI> all;
+    for(int y=border; y<h-border; y++)
+        for(int x=border; x<w-border; x++)
+            all.push_back(POI(x,y,eval[y][x]));
+
+    std::sort(all.begin(), all.end());
+
+    std::vector<POI> pois;
+
+    for(int i=0; i<all.size(); i++)
     {
-        if (best.empty()) break;
-        pnt curr = best.top(); best.pop();
-        if (tabu[curr.y][curr.x]) continue;
-        if (curr.val < minimum) break;
+        const POI &curr = all[i];
         
-        poi.push_back(curr);
-        curr.val = std::max(std::min(curr.val, 0.0f), 255.0f);
-        float R = R0*3.0 - 2*curr.val*R0/255.0f;
+        if(tabu[curr.y][curr.x]) continue;
+        if(curr.val < minimum) break;
+        
+        pois.push_back(curr);
+        
+        float R = R0*3.0 - 2.0*R0*std::min(curr.val,1.0f);
         int iR = R;
+
         for (int y=-iR; y<=iR; y++)
             for (int x=-iR; x<=iR; x++)
-                if (x*x+y*y <= (int)R*R && onBoard(x+curr.x,y+curr.y,W,H))
+                if (x*x+y*y <= (int)R*R && tabu.inside(x+curr.x,y+curr.y))
                     tabu[curr.y+y][curr.x+x] = 1;
     }
+
+    return pois;
 }
     
-Image PoiFinder::toImage(float threshold = 50.0, int howmany = 1000000000)
+void renderPOIs(const std::vector<POI> &pois, Image *dst, float threshold, int count)
 {
-    Image ret(W, H);
-    ret.fill(0);
-    for (int i=0; i<(int)poi.size() && i<howmany && poi[i].val >= threshold; i++)
-    {
-        int x0 = poi[i].x, y0 = poi[i].y;
-        for (int x=x0-1; x<=x0+1; x++)
-            for (int y=y0-1; y<=y0+1; y++)
-                if (onBoard(x,y,W,H))
-                    ret[y][x] = 255;
-    }
-    fprintf(stderr, "to image done\n");
-    return ret;
+    dst->fill(1);
+    for (int i=0; i<pois.size() && i<count && pois[i].val >= threshold; i++)
+        dst->drawRect(pois[i].x-1, pois[i].x+1, pois[i].y-1, pois[i].y+1, 255);
 }
 
 /* ------------------------------------------------------------------------ */
-
 
 int main(int argc, char *argv[])
 {
     if(argc < 5) {
-        fprintf(stderr, "usage: poi [input] [output] [steps] [scale1, scale2, ...] \n");
+        fprintf(stderr, "usage: poi [input] [steps] [scale1, scale2, ...] \n");
         return 1;
     }
 
     spawn_worker_threads(2);
 
-    int steps = strtol(argv[3],NULL,0);
+    int steps = strtol(argv[2],NULL,0);
 
     std::vector<float> scales;
-    for(int i=4; i<argc; i++)
+    for(int i=3; i<argc; i++)
         scales.push_back(strtod(argv[i],NULL));
 
     Image src = Image::readPGM(argv[1]);
     Array2D<float> eval = evaluateImage(src, steps, scales);
-    Image evalImg = reduceEvaluationToImage(eval);
-    evalImg.writePGM(argv[2]);
     
-    PoiFinder PF(eval, scales.back()/2+1);
-    PF.toImage(40.0, 100).writePGM("foo.pgm");
+    reduceEvaluationToImage(eval).writePGM("eval.pgm");
+    
+    std::vector<POI> pois = findPOIs(eval, getBorderSize(scales));
+    printf("found %d pois\n", pois.size());
+
+    Image poisImg(src.getWidth(), src.getHeight());
+    poisImg.fill(0);
+    renderPOIs(pois, &poisImg, 40.0, 100);
+    poisImg.writePGM("pois.pgm");
     
     return 0;
 }
-
-/* 
-for (int i=0, j=0, k=0; k<as+bs; k++)
-{
-    if (i == as) C[k] = B[j++];
-    else if (j == bs) C[k] = A[i++];
-    else if (A[i] < B[j]) C[k] = A[i++];
-    else C[k] = B[j++];
-}*/
-
-

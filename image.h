@@ -46,6 +46,7 @@ public:
     
     inline int getWidth() const { return width; }
     inline int getHeight() const { return height; }
+    inline bool inside(int x, int y) const { return x>=0 && y>=0 && x<width && y<height; }
 };
         
 
@@ -63,6 +64,7 @@ public:
     void writePGM(const char* filename) const;
 
     inline void fill(uint8_t with) { memset(data, with, width*height); }
+    void drawRect(int x0, int x1, int y0, int y1, uint8_t val);
 };
 
 #endif

@@ -51,36 +51,10 @@ void Image::writePGM(const char *filename) const
     fclose(f);
 }
 
-#if 0
-
-void Image::move(int dw, int dh)
+void Image::drawRect(int x0, int x1, int y0, int y1, uint8_t val)
 {
-    Image tmp(width, height);
-
-    for (int i=0; i<height; i++)
-        for (int j=0; j<width; j++)
-            tmp[i][j] = 
-                i-dh >= 0 && j-dw >=0 && i-dh < height && j-dw < width
-                    ? (*this)[i-dh][j-dw]
-                    : 0;
-
-    (*this) = tmp;
+    for(int y=y0; y<=y1; y++)
+        for(int x=x0; x<=x1; x++)
+            if(inside(x,y))
+                (*this)[y][x] = val;
 }
-
-void Image::randomInit()
-{
-    for (int i=0; i<height; i++)
-        for (int j=0; j<width; j++)
-            (*this)[i][j] = rand()&255;
-}
-
-Image Image::difference(const Image& im) const //wartość bezwzględna różnicy między dwoma obrazkami, pixel po pixelu
-{
-    Image ret(width, height);
-    for (int i=0; i<height; i++) 
-        for (int j=0; j<width; j++)
-            ret[i][j] = std::abs((int)(*this)[i][j] - (int)im[i][j]);
-    return ret;
-}
-
-#endif
