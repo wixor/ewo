@@ -1,8 +1,8 @@
 #ifndef __EVOLUTION
 #define __EVOLUTION
-#include "mpoi.h"
 #include "workers.h"
 #include "image.h"
+#include "poi.h"
 #include <cmath>
 #include <vector>
 
