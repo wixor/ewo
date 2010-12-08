@@ -1,13 +1,4 @@
-#include <cstdlib>
-#include <cmath>
-#include <cassert>
-#include <unistd.h>
-#include <algorithm>
-#include <vector>
-
-#include "image.h"
-#include "workers.h"
-#include "mpoi.h"
+#include "poi.h"
 
 #define debug(fmt, ...) fprintf(stderr, fmt, ## __VA_ARGS__)
 
@@ -121,7 +112,7 @@ void DifferenceJob::run()
     
 /* ------------------------------------------------------------------------ */
 
-static Array2D<float> evaluateImage(const Image &src, int steps, const std::vector<float> &scales)
+Array2D<float> evaluateImage(const Image &src, int steps, const std::vector<float> &scales)
 {
     int w = src.getWidth(), h = src.getHeight();
     
@@ -191,7 +182,7 @@ static Array2D<float> evaluateImage(const Image &src, int steps, const std::vect
     return ret;
 }
 
-static Image reduceEvaluationToImage(const Array2D<float> &eval)
+Image reduceEvaluationToImage(const Array2D<float> &eval)
 {
     int w = eval.getWidth(), h = eval.getHeight();
 
@@ -229,8 +220,6 @@ int main(int argc, char *argv[])
     Array2D<float> eval = evaluateImage(src, steps, scales);
     Image evalImg = reduceEvaluationToImage(eval);
     evalImg.writePGM(argv[2]);
-    
-    fprintf(stderr, "now find pois\n");
     
     PoiFinder PF(eval, scales.back()/2+1);
     PF.toImage(40.0, 100).writePGM("foo.pgm");

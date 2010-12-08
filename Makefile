@@ -5,17 +5,11 @@ CXXFLAGS := -O2 -pthread -Wno-unused-result -Wall -ffast-math -march=native -mss
 CFLAGS_gui-gtk := $(shell pkg-config --cflags gtk+-2.0)
 LDFLAGS := -lm -pthread -ffast-math
 
-SRCS := image.C gui-example.C gui-gtk.c findCorners.C poi.C poi2.C mpoi.C
+SRCS := image.C gui-example.C gui-gtk.c poi.C mpoi.C evolution.C
 
 all:
 
-findCorners: findCorners.o image.o
-	$(CXX) $(LDFLAGS) $^ -o $@
-
 poi: poi.o image.o gui-gtk.o workers.o mpoi.o
-	$(CXX) $(LDFLAGS) `pkg-config --libs gtk+-2.0` $^ -o $@
-
-poi2: poi2.o image.o gui-gtk.o workers.o mpoi.o
 	$(CXX) $(LDFLAGS) `pkg-config --libs gtk+-2.0` $^ -o $@
 
 gui-example: gui-gtk.o gui-example.o image.o
@@ -27,6 +21,9 @@ image: image.o
 mpoi: mpoi.o
 	$(CXX) $(LDFLAGS) `pkg-config --libs gtk+-2.0` $^ -o $@
 
+evolution: evolution.o
+	$(CXX) $(LDFLAGS) `pkg-config --libs gtk+-2.0` $^ -o $@
+	
 %.o: %.c
 	$(CC) $(CPPFLAGS) $(CFLAGS) ${CFLAGS_$(basename $@)} -c $< -o $@
 %.o: %.C

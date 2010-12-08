@@ -25,6 +25,7 @@ class PoiFinder
     int W, H;
 public:
     PoiFinder(const Array2D<float> &src, int bounding); //szukaj punktów napałowo
+    inline std::vector<pnt> getPoiVec() const { return poi; }
     Image toImage(float threshold, int howmany);
 };
 

@@ -52,7 +52,6 @@ public:
 class Image : public Array2D<uint8_t>
 {
 public:
-    
     Image(const Image& im) : Array2D<uint8_t>(im) {}
     Image(int w, int h) : Array2D<uint8_t>(w, h) {}
     
