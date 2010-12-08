@@ -7,6 +7,7 @@
 
 #include "image.h"
 #include "workers.h"
+#include "mpoi.h"
 
 #define debug(fmt, ...) fprintf(stderr, fmt, ## __VA_ARGS__)
 
@@ -228,9 +229,22 @@ int main(int argc, char *argv[])
     Array2D<float> eval = evaluateImage(src, steps, scales);
     Image evalImg = reduceEvaluationToImage(eval);
     evalImg.writePGM(argv[2]);
-
+    
+    fprintf(stderr, "now find pois\n");
+    
+    PoiFinder PF(eval, scales.back()/2+1);
+    PF.toImage(40.0, 100).writePGM("foo.pgm");
+    
     return 0;
 }
 
+/* 
+for (int i=0, j=0, k=0; k<as+bs; k++)
+{
+    if (i == as) C[k] = B[j++];
+    else if (j == bs) C[k] = A[i++];
+    else if (A[i] < B[j]) C[k] = A[i++];
+    else C[k] = B[j++];
+}*/
 
 
