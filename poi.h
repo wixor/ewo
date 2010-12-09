@@ -21,6 +21,6 @@ inline float dist(POI p1, POI p2) { return sqrt((float)((p1.x-p2.x)*(p1.x-p2.x)+
 Array2D<float> evaluateImage(const Image &src, int steps, const std::vector<float> &scales);
 Image reduceEvaluationToImage(const Array2D<float> &eval);
 std::vector<POI> findPOIs(const Array2D<float> &eval, int border, float threshold = 10.0f, int count = 1000000);
-void renderPOIs(const std::vector<POI> &pois, Image *dst, float threshold, int count);
+void renderPOIs(const std::vector<POI> &pois, Image *dst, float threshold = 0.0f, int count = 1000);
 
 #endif

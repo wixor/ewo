@@ -131,8 +131,6 @@ static int getBorderSize(const std::vector<float> &scales)
 
 Array2D<float> evaluateImage(const Image &src, int steps, const std::vector<float> &scales)
 {
-    spawn_worker_threads(2); /// co to jest?
-    
     int w = src.getWidth(), h = src.getHeight();
     
     int border = getBorderSize(scales);
@@ -253,7 +251,7 @@ std::vector<POI> findPOIs(const Array2D<float> &eval, int border, float threshol
     return pois;
 }
     
-void renderPOIs(const std::vector<POI> &pois, Image *dst, float threshold = 0.0f, int count = 1000)
+void renderPOIs(const std::vector<POI> &pois, Image *dst, float threshold, int count)
 {
     dst->fill(1);
     for (int i=0; i<(int)pois.size() && i<count && pois[i].val >= threshold; i++)

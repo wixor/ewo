@@ -12,11 +12,16 @@
 
 #define debug(fmt, ...) fprintf(stderr, fmt, ## __VA_ARGS__)
 
-class Matrix33 : public Array2D<float>
+class Matrix33
 {
+    float data[9];
+
 public:
     inline Matrix33();
     virtual ~Matrix33();
+    
+    inline float* operator[](int row) { return data+row*3; }
+    inline const float* operator[](int row) const { return data+row*3; }
 
     inline static Matrix33 translation(float dx, float dy);
     inline static Matrix33 rotation(float alpha);
@@ -26,7 +31,7 @@ public:
     inline Matrix33 operator*(const Matrix33 &M) const;
 };
 
-Matrix33::Matrix33() : Array2D<float>(3,3)
+Matrix33::Matrix33()
 {
     Matrix33 &me = *this;
     me[0][0] = me[0][1] = me[0][2] = me[1][0] = me[1][1] = me[1][2] = me[2][0] = me[2][1] = me[2][2] = 0.0f;
@@ -254,7 +259,8 @@ public:
                 Image tmpimg(W, H);
                 pop[0].apply(*maybeInst).toImage(&tmpimg);
                 ds->update(tmpimg);
-                ds->recaption("distance = %.1f", 1.0f/pop[0].value);
+                ds->recaption("distance = %.1f. angle=%.2f, dx=%.1f, dy=%.1f, scx=%.1f, scy=%.1f", 
+                               1.0f/pop[0].value, pop[0].alfa, pop[0].dx, pop[0].dy, pop[0].scx, pop[0].scy);
             }
         }
         return pop[0];
