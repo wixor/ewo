@@ -131,6 +131,8 @@ static int getBorderSize(const std::vector<float> &scales)
 
 Array2D<float> evaluateImage(const Image &src, int steps, const std::vector<float> &scales)
 {
+    spawn_worker_threads(2); /// co to jest?
+    
     int w = src.getWidth(), h = src.getHeight();
     
     int border = getBorderSize(scales);
@@ -156,7 +158,7 @@ Array2D<float> evaluateImage(const Image &src, int steps, const std::vector<floa
         jobs[i].y2 = h-border;
         jobs[i].completion = &c;
     }
-
+    
     for(int s=0; s<(int)scales.size(); s++)
     {
         for(int i=0; i<steps; i++)
@@ -167,7 +169,7 @@ Array2D<float> evaluateImage(const Image &src, int steps, const std::vector<floa
             jobs[i].dy = jobs[i].scale * sinf(angle);
             aq->queue(&jobs[i]);
         }
-
+        
         c.wait();
         
         for(int i=0; i<steps; i++)
@@ -175,7 +177,7 @@ Array2D<float> evaluateImage(const Image &src, int steps, const std::vector<floa
                 for(int x=0; x<w; x++)
                     globalProfile[i][y][x] *= currentProfile[i][y][x];
     }
-
+    
     Array2D<float> ret(w,h);
     for(int y=0; y<h; y++)
         for(int x=0; x<w; x++)
@@ -212,10 +214,9 @@ Image reduceEvaluationToImage(const Array2D<float> &eval)
     return ret;
 }
 
-std::vector<POI> findPOIs(const Array2D<float> &eval, int border)
+std::vector<POI> findPOIs(const Array2D<float> &eval, int border, float threshold, int count)
 {
     const float R0 = 20.0;
-    const float minimum = 20.0;
 
     int w = eval.getWidth(), h = eval.getHeight();
 
@@ -231,12 +232,12 @@ std::vector<POI> findPOIs(const Array2D<float> &eval, int border)
 
     std::vector<POI> pois;
 
-    for(int i=0; i<all.size(); i++)
+    for(int i=0; i<(int)all.size() && (int)pois.size() < count; i++)
     {
         const POI &curr = all[i];
         
         if(tabu[curr.y][curr.x]) continue;
-        if(curr.val < minimum) break;
+        if(curr.val < threshold) break;
         
         pois.push_back(curr);
         
@@ -252,15 +253,16 @@ std::vector<POI> findPOIs(const Array2D<float> &eval, int border)
     return pois;
 }
     
-void renderPOIs(const std::vector<POI> &pois, Image *dst, float threshold, int count)
+void renderPOIs(const std::vector<POI> &pois, Image *dst, float threshold = 0.0f, int count = 1000)
 {
     dst->fill(1);
-    for (int i=0; i<pois.size() && i<count && pois[i].val >= threshold; i++)
+    for (int i=0; i<(int)pois.size() && i<count && pois[i].val >= threshold; i++)
         dst->drawRect(pois[i].x-1, pois[i].x+1, pois[i].y-1, pois[i].y+1, 255);
 }
 
 /* ------------------------------------------------------------------------ */
 
+/*
 int main(int argc, char *argv[])
 {
     if(argc < 5) {
@@ -290,4 +292,4 @@ int main(int argc, char *argv[])
     poisImg.writePGM("pois.pgm");
     
     return 0;
-}
+}*/

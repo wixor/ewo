@@ -18,7 +18,7 @@ gui-example: gui-gtk.o gui-example.o image.o
 image: image.o
 	$(CXX) $(LDFLAGS) `pkg-config --libs gtk+-2.0` $^ -o $@
 
-evolution: evolution.o
+evolution: evolution.o gui-gtk.o workers.o image.o poi.o
 	$(CXX) $(LDFLAGS) `pkg-config --libs gtk+-2.0` $^ -o $@
 	
 %.o: %.c
