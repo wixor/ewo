@@ -229,17 +229,28 @@ public:
         int which = rand()%3;
         switch (which) {
             case 0: A.M = A.M*Matrix33::Rtranslation(dmove*W, dmove*H); break;
-            case 1: A.M = A.M*Matrix33::Rscaling(expf(dsc), expf(dsc)); break;
+            case 1: A.M = A.M*Matrix33::Rscaling(dsc, dsc); break;
             case 2: A.M = A.M*Matrix33::Rrotation(dalfa); break;
         }
     }
     
     inline float evaluate(Agent& A) { return A.value = 1.0f/origInst->distance(A.apply(*maybeInst)); }
     inline void evaluate() { for (int i=0; i<N; i++) evaluate(pop[i]); }
-    Agent SSGAmainLoop(int maxiter = 1000, DisplaySlot *ds = NULL)
+    Agent SSGAmainLoop(int maxiter = 1000, DisplaySlot *bestDS = NULL, DisplaySlot *origDS = NULL, DisplaySlot *maybeDS = NULL)
     {
         float change = 10.0f;
         randomInit();
+        
+        Image origPOIimg(W, H);
+        Image maybePOIimg(maybe->getWidth(), maybe->getHeight());
+        Image tmpImg(W, H);
+        
+        origInst->toImage(&origPOIimg);
+        maybeInst->toImage(&maybePOIimg);
+        
+        if (origDS != NULL) origDS->update(origPOIimg);
+        if (maybeDS != NULL) maybeDS->update(maybePOIimg);
+        
         for (int it=0; it<maxiter; it++)
         {
             for (int i=0; i<N/2; i++)
@@ -249,11 +260,10 @@ public:
             change *= 0.998;
             evaluate();
             std::sort(pop.rbegin(), pop.rend());
-            if (ds != NULL) {
-                Image tmpimg(W, H);
-                pop[0].apply(*maybeInst).toImage(&tmpimg);
-                ds->update(tmpimg);
-                ds->recaption("distance = %.1f. angle=%.2f, dx=%.1f, dy=%.1f, scx=%.1f, scy=%.1f", 
+            if (bestDS != NULL) {
+                pop[0].apply(*maybeInst).toImage(&tmpImg);
+                bestDS->update(tmpImg);
+                bestDS->recaption("distance = %.1f. angle=%.2f, dx=%.1f, dy=%.1f, scx=%.1f, scy=%.1f", 
                                1.0f/pop[0].value, pop[0].alfa(), pop[0].dx(), pop[0].dy(), pop[0].scx(), pop[0].scy());
             }
         }
@@ -304,7 +314,7 @@ int main(int argc, char *argv[])
     debug("okay, start evolving\n");
     
     Evolution EVO(&origImg, &pretendImg, 1000);
-    EVO.SSGAmainLoop(1000000, &bestmatchDS);
+    EVO.SSGAmainLoop(1000000, &bestmatchDS, &origDS, &maybeDS);
     
     return 0;
 }
