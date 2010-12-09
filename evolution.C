@@ -12,6 +12,13 @@
 
 #define debug(fmt, ...) fprintf(stderr, fmt, ## __VA_ARGS__)
 
+inline float randomFloat(float maxv = 1.0f) //jednostajnie z przedziału [0, 1), 
+{ 
+    return maxv*(float)(rand()%1000000)/1000000.0f+(float)(rand()%1000000)/1000000000000.0f; 
+}
+inline float randomSign() { return (rand()&1)? -1.0f : 1.0f; }
+inline float randomSigned(float maxv = 1.0f) { return randomFloat(maxv)*randomSign(); }
+
 class Matrix33
 {
     float data[9];
@@ -26,6 +33,10 @@ public:
     inline static Matrix33 translation(float dx, float dy);
     inline static Matrix33 rotation(float alpha);
     inline static Matrix33 scaling(float sx, float sy);
+    
+    inline static Matrix33 Rtranslation(float maxvx, float maxvy) { return translation(randomSigned(maxvx), randomSigned(maxvy)); }
+    inline static Matrix33 Rrotation(float maxv) { return rotation(randomSigned(maxv)); }
+    inline static Matrix33 Rscaling(float maxvx, float maxvy) { return scaling(randomSigned(maxvx), randomSigned(maxvy)); }
     
     inline POI operator*(const POI &p) const;
     inline Matrix33 operator*(const Matrix33 &M) const;
@@ -128,12 +139,6 @@ float ImageInstance::distance(const ImageInstance& inst)
 
 /* ------------------------------------------------------------------------ */
 
-inline float randomFloat() //jednostajnie z przedziału [0, 1), 
-{ 
-    return (float)(rand()%1000000)/1000000.0f+(float)(rand()%1000000)/1000000000000.0f;
-}
-inline float randomSign() { return (rand()&1)? -1.0f : 1.0f; }
-
 class Individual 
 {
 public:
@@ -147,17 +152,19 @@ public:
 
 class Agent : public Individual
 {public:
-    float alfa;
-    float dx, dy;
-    float scx, scy;
+    Matrix33 M;
     float W, H; 
     /* musimy znac wymiary obrazka zeby wiedziec jakie jest sensowne przesuniecie
      * to sa wymiary obrazka DOCELOWEGO, a nie przetwarzanego !! */
-    float* params; // 5!!
-    const static int PARAM_CNT = 5;
-
+    
+    inline float dx() { return M[0][2]; }
+    inline float dy() { return M[1][2]; }
+    inline float scx() { return sqrtf(M[0][0]*M[0][0]+M[0][1]*M[0][1]); }
+    inline float scy() { return sqrtf(M[1][0]*M[1][0]+M[1][1]*M[1][1]); }
+    inline float alfa() { float sx = scx(); return atan2(M[0][1]/sx, M[0][0]/sx); }
+        
     inline Agent(int w, int h, bool random = true); //random init
-    Matrix33 toMatrix() const;
+    Matrix33 toMatrix() const { return M; }
 
     std::vector<POI> applyToPOIs(const std::vector<POI> &v);
     ImageInstance apply(const ImageInstance& inst);
@@ -165,33 +172,26 @@ class Agent : public Individual
 
 Agent::Agent(int w, int h, bool random)
 {
-    params = &alfa;
     W = w; H = h;
     if (random) {
-        alfa = randomFloat()*2.0f*(float)M_PI;
-        dx = randomFloat()*W-W/2.0, dy = randomFloat()*H-H/2.0;
-        scx = randomFloat()*10.0f-5.0f;
-        scy = randomFloat()*10.0f-5.0f;
+        M[0][2] = randomFloat(W);
+        M[1][2] = randomFloat(H);
+        float scx = randomSigned(5.0f),
+              scy = randomSigned(5.0f),
+              alfa = randomFloat(2.0f*(float)M_PI);
+        M[0][0] = cosf(alfa)*scx;
+        M[0][1] = sinf(alfa)*scx;
+        M[1][0] = -sinf(alfa)*scy;
+        M[1][1] = cosf(alfa)*scy;
+        M[2][2] = 1.0f;
     }
     else {
-        alfa = dx = dy = 0.0f;
-        scx = scy = 1.0f;
+        M[0][0] = M[1][1] = M[2][2] = 1.0f;
     }
-}
-        
-
-Matrix33 Agent::toMatrix() const
-{
-    /* najpierw skalowanie, potem przesuniecie, na koncu obrot */
-    return Matrix33::rotation(alfa) * 
-           Matrix33::translation(dx, dy) *
-           Matrix33::scaling(scx, scy);
 }
 
 std::vector<POI> Agent::applyToPOIs(const std::vector<POI> &v)
 {
-    Matrix33 M = toMatrix();
-
     std::vector<POI> ret(v.size());
     for (int i=0; i<(int)v.size(); i++) 
         ret[i] = M*v[i];
@@ -218,26 +218,20 @@ public:
     Evolution(Image* imorig, Image* immay, int n);
     inline static float takerandom(float a, float b) { return (randomSign()>0.0 ? a : b); }
     inline void randomInit() { for (int i=0; i<N; i++) pop.push_back(Agent(W, H, true)); }
-    inline Agent uniformCrossover2(const Agent& A1, const Agent& A2)
-    {
-        Agent ret(W, H, false);
-        for (int i=0; i<Agent::PARAM_CNT; i++)
-            ret.params[i] = takerandom(A1.params[i], A2.params[i]);
-        return ret;
-    }
     inline static void mutate(float &value, float dv, float prob) { 
         value += (randomFloat()<prob? randomFloat()*dv*2.0-dv : 0); 
     }
-    inline static void mutate(Agent& A, float prob, float change)
+    inline void mutate(Agent& A, float prob, float change)
     {
         const float dsc = 0.01f*change;
         const float dmove = 1.0f*change;
         const float dalfa = 0.05f*change;
-        mutate(A.scx, dsc, prob);
-        mutate(A.scy, dsc, prob);
-        mutate(A.dx, dmove, prob);
-        mutate(A.dy, dmove, prob);
-        mutate(A.alfa, dalfa, prob);
+        int which = rand()%3;
+        switch (which) {
+            case 0: A.M = A.M*Matrix33::Rtranslation(dmove*W, dmove*H); break;
+            case 1: A.M = A.M*Matrix33::Rscaling(expf(dsc), expf(dsc)); break;
+            case 2: A.M = A.M*Matrix33::Rrotation(dalfa); break;
+        }
     }
     
     inline float evaluate(Agent& A) { return A.value = 1.0f/origInst->distance(A.apply(*maybeInst)); }
@@ -260,7 +254,7 @@ public:
                 pop[0].apply(*maybeInst).toImage(&tmpimg);
                 ds->update(tmpimg);
                 ds->recaption("distance = %.1f. angle=%.2f, dx=%.1f, dy=%.1f, scx=%.1f, scy=%.1f", 
-                               1.0f/pop[0].value, pop[0].alfa, pop[0].dx, pop[0].dy, pop[0].scx, pop[0].scy);
+                               1.0f/pop[0].value, pop[0].alfa(), pop[0].dx(), pop[0].dy(), pop[0].scx(), pop[0].scy());
             }
         }
         return pop[0];
@@ -315,5 +309,6 @@ int main(int argc, char *argv[])
     return 0;
 }
         
+
 
 

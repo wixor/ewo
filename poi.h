@@ -16,7 +16,7 @@ struct POI {
                               y   < p.y;
     }
 };
-inline float dist(POI p1, POI p2) { return sqrt((float)((p1.x-p2.x)*(p1.x-p2.x)+(p1.y-p2.y)*(p1.y-p2.y))); }
+inline float dist(POI p1, POI p2) { return sqrt((p1.x-p2.x)*(p1.x-p2.x)+(p1.y-p2.y)*(p1.y-p2.y)); }
 
 Array2D<float> evaluateImage(const Image &src, int steps, const std::vector<float> &scales);
 Image reduceEvaluationToImage(const Array2D<float> &eval);
