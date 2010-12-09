@@ -36,7 +36,7 @@ public:
     
     inline static Matrix33 Rtranslation(float maxvx, float maxvy) { return translation(randomSigned(maxvx), randomSigned(maxvy)); }
     inline static Matrix33 Rrotation(float maxv) { return rotation(randomSigned(maxv)); }
-    inline static Matrix33 Rscaling(float maxvx, float maxvy) { return scaling(randomSigned(maxvx), randomSigned(maxvy)); }
+    inline static Matrix33 Rscaling(float maxsx, float maxsy);
     
     inline POI operator*(const POI &p) const;
     inline Matrix33 operator*(const Matrix33 &M) const;
@@ -72,6 +72,14 @@ Matrix33 Matrix33::scaling(float sx, float sy)
 {
     Matrix33 ret;
     ret[0][0] = sx; ret[1][1] = sy;
+    ret[2][2] = 1.0f;
+    return ret;
+}
+
+Matrix33 Matrix33::Rscaling(float maxsx, float maxsy)
+{
+    Matrix33 ret;
+    ret[0][0] = exp(randomSigned(maxsx)); ret[1][1] = exp(randomSigned(maxsy));
     ret[2][2] = 1.0f;
     return ret;
 }
@@ -236,7 +244,7 @@ public:
     
     inline float evaluate(Agent& A) { return A.value = 1.0f/origInst->distance(A.apply(*maybeInst)); }
     inline void evaluate() { for (int i=0; i<N; i++) evaluate(pop[i]); }
-    Agent SSGAmainLoop(int maxiter = 1000, DisplaySlot *bestDS = NULL, DisplaySlot *origDS = NULL, DisplaySlot *maybeDS = NULL)
+    Agent mainLoop(int maxiter = 1000, DisplaySlot *bestDS = NULL, DisplaySlot *origDS = NULL, DisplaySlot *maybeDS = NULL)
     {
         float change = 10.0f;
         randomInit();
@@ -314,7 +322,7 @@ int main(int argc, char *argv[])
     debug("okay, start evolving\n");
     
     Evolution EVO(&origImg, &pretendImg, 1000);
-    EVO.SSGAmainLoop(1000000, &bestmatchDS, &origDS, &maybeDS);
+    EVO.mainLoop(1000000, &bestmatchDS, &origDS, &maybeDS);
     
     return 0;
 }
