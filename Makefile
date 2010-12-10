@@ -5,7 +5,8 @@ CXXFLAGS := -O2 -pthread -Wno-unused-result -Wall -ffast-math -march=native -mss
 CFLAGS_gui-gtk := $(shell pkg-config --cflags gtk+-2.0)
 LDFLAGS := -lm -pthread -ffast-math
 
-SRCS := image.C gui-example.C gui-gtk.c poi.C evolution.C
+SRCS := image.C config-example.C config.C gui-example.C gui-gtk.c \
+        poi.C evolution.C
 
 all:
 
@@ -14,9 +15,8 @@ poi: poi.o image.o gui-gtk.o workers.o
 
 gui-example: gui-gtk.o gui-example.o image.o
 	$(CXX) $(LDFLAGS) `pkg-config --libs gtk+-2.0` $^ -o $@
-
-image: image.o
-	$(CXX) $(LDFLAGS) `pkg-config --libs gtk+-2.0` $^ -o $@
+config-example: config-example.o config.o
+	$(CXX) $(LDFLAGS)  $^ -o $@
 
 evolution: evolution.o gui-gtk.o workers.o image.o poi.o
 	$(CXX) $(LDFLAGS) `pkg-config --libs gtk+-2.0` $^ -o $@
