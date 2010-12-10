@@ -150,18 +150,19 @@ float ImageInstance::distance(const ImageInstance& inst)
 class Individual 
 {
 public:
-    float value;
+    float aimf;
 
-    inline Individual() : value(-1.0f) { }
+    inline Individual() : aimf(-1.0f) { }
     virtual Matrix33 toMatrix() const = 0;
     
-    inline bool operator<(const Individual& I) const { return value < I.value; }
+    inline bool operator<(const Individual& I) const { return aimf < I.aimf; }
 };
 
 class Agent : public Individual
 {public:
     Matrix33 M;
     float W, H; 
+    float dist;
     /* musimy znac wymiary obrazka zeby wiedziec jakie jest sensowne przesuniecie
      * to sa wymiary obrazka DOCELOWEGO, a nie przetwarzanego !! */
     
@@ -178,7 +179,7 @@ class Agent : public Individual
     ImageInstance apply(const ImageInstance& inst);
 };
 
-Agent::Agent(int w, int h, bool random)
+Agent::Agent(int w, int h, bool random) : Individual()
 {
     W = w; H = h;
     if (random) {
@@ -242,11 +243,17 @@ public:
         }
     }
     
-    inline float evaluate(Agent& A) { return A.value = 1.0f/origInst->distance(A.apply(*maybeInst)); }
-    inline void evaluate() { for (int i=0; i<N; i++) evaluate(pop[i]); }
+    inline float evaluateDist(Agent& A) { return A.dist = origInst->distance(A.apply(*maybeInst)); }
+    inline void evaluateAll() { 
+        float dmax = 0.0f;
+        for (int i=0; i<N; i++) dmax = std::max(dmax, evaluateDist(pop[i])); 
+        float sumd = 0.0f;
+        for (int i=0; i<N; i++) sumd += dmax-pop[i].dist;
+        for (int i=0; i<N; i++) pop[i].aimf = (dmax-pop[i].dist)/sumd;
+    }
     Agent mainLoop(int maxiter = 1000, DisplaySlot *bestDS = NULL, DisplaySlot *origDS = NULL, DisplaySlot *maybeDS = NULL)
     {
-        float change = 10.0f;
+        float change = 5.0f;
         randomInit();
         
         Image origPOIimg(W, H);
@@ -261,19 +268,22 @@ public:
         
         for (int it=0; it<maxiter; it++)
         {
-            for (int i=0; i<N/2; i++)
-                pop[i+N/2] = pop[i];
+            for (int i=0; i<N/3; i++)
+                pop[N-i-1] = pop[i];
             
             for (int i=0; i<N; i++) mutate(pop[i], 0.5, change);
-            change *= 0.998;
-            evaluate();
+            
+            evaluateAll();
             std::sort(pop.rbegin(), pop.rend());
             if (bestDS != NULL) {
                 pop[0].apply(*maybeInst).toImage(&tmpImg);
                 bestDS->update(tmpImg);
-                bestDS->recaption("distance = %.1f. angle=%.2f, dx=%.1f, dy=%.1f, scx=%.1f, scy=%.1f", 
-                               1.0f/pop[0].value, pop[0].alfa(), pop[0].dx(), pop[0].dy(), pop[0].scx(), pop[0].scy());
+                bestDS->recaption("distance = %.1f, aim function = %.1f. angle=%.2f, dx=%.1f, dy=%.1f, scx=%.1f, scy=%.1f", 
+                               pop[0].dist, pop[0].alfa(), pop[0].dx(), pop[0].dy(), pop[0].scx(), pop[0].scy());
             }
+            
+            // change = origInst->poiVec.size()*(W+H)*0.001f;
+            change *= 0.993f;
         }
         return pop[0];
     }
@@ -321,7 +331,7 @@ int main(int argc, char *argv[])
     
     debug("okay, start evolving\n");
     
-    Evolution EVO(&origImg, &pretendImg, 1000);
+    Evolution EVO(&origImg, &pretendImg, 2000);
     EVO.mainLoop(1000000, &bestmatchDS, &origDS, &maybeDS);
     
     return 0;
