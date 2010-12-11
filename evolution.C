@@ -289,7 +289,6 @@ void Agent::rotate(float angle, float ox, float oy) {
       * M;
 }
 void Agent::scale(float sx, float sy, float ox, float oy) {
-    debug("scale(%f,%f)\n",sx,sy);
     POI origin = M * POI(ox,oy,0);
     M = Matrix33::translation(origin.x,origin.y)
       * Matrix33::scaling(sx, sy)
@@ -347,7 +346,7 @@ void Population::EvaluationJob::run()
 }
 void Population::evaluate()
 {
-    const int jobSlice = 100;
+    const int jobSlice = 200;
     int nJobs = (pop.size() + jobSlice - 1) / jobSlice;
     EvaluationJob jobs[nJobs];
     Completion c;
@@ -434,18 +433,18 @@ void Population::evolve()
         makeRandom(&pop[i]);
 
     DisplaySlot best("best fit");
+    best.bind();
 
     for(;;)
     {
-        debug("step\n");
         evaluate();
 
-        best.recaption("best fit: distance %f, fitness %f, dx=%f, dy=%f, sx=%f, sy=%f, a=%f",
+        best.recaption("best fit: dist %.2f, fitness %f\nd=(%.0f,%.0f), s=(%.2f,%.2f), a=%.3f",
                        pop[0].distance, pop[0].fitness,
-                       pop[0].dx(),pop[0].dy(),pop[0].sx(),pop[0].sy(),pop[0].alfa());
+                       pop[0].dx(),pop[0].dy(),pop[0].sx(),pop[0].sy(),pop[0].alfa()/M_PI*180.0);
 
         best.update(renderTransformedPOIs(
-            known->pois, pop[0].M, known->raw->getWidth(), known->raw->getHeight()));
+            known->pois, pop[0].M, alien->raw->getWidth(), alien->raw->getHeight()));
 
         int survivors = cfgSurvivalRate * pop.size();
         for(int i=survivors; i<(int)pop.size(); i++)
