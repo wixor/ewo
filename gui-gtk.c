@@ -17,25 +17,24 @@
 
 struct displayarea
 {
-    GtkVBox *vbox;
-    GtkLabel *name;
-    GtkLabel *caption;
-    GtkScrolledWindow *scrolled_window;
-    GtkLayout *area;
+    GtkVBox *root;
+      GtkScrolledWindow *scrolled_window;
+        GtkLayout *area;
+      GtkHBox *buttbox;
+        GtkComboBox *slotselect;
+        GtkButton *zoomin;
+        GtkButton *zoomout;
+      GtkLabel *caption;
 
     struct displayslot *slot;
-    int row, col;
+    float scale;
 };
 
-static GList *slots = NULL, *areas = NULL;
+static struct displayarea areas[4];
+
+static GList *slots = NULL;
+static GtkListStore *slotsModel;
 static pthread_mutex_t slots_lock;
-
-static GtkWidget *window, *table, *popup_menu;
-static struct displayarea *popup_da;
-
-static cairo_surface_t *transparency_surface;
-
-static void *x11_display;
 
 /* ------------------------------------------------------------------------- */
 
@@ -46,27 +45,22 @@ static gboolean displayarea_expose(GtkWidget *widget, GdkEventExpose *event, gpo
     GdkWindow *bin_window = gtk_layout_get_bin_window(da->area);
     cairo_t *cairo = gdk_cairo_create(bin_window);
 
-
     if(!da->slot)
     {
-        cairo_set_source_rgb(cairo, 1,0,0);
+        cairo_set_source_rgb(cairo, .85,.85,.85);
         cairo_paint(cairo);
     }
     else
     {
         pthread_mutex_lock(&da->slot->lock);
 
-        if(!da->slot->cr_surface) {
-            cairo_set_source_rgb(cairo, 0,1,0);
-            cairo_paint(cairo);
-        } else {
-            cairo_set_source_surface(cairo, transparency_surface, 0,0);
-            cairo_pattern_set_extend(cairo_get_source(cairo), CAIRO_EXTEND_REPEAT);
-            cairo_paint(cairo);
-
-            cairo_set_source_surface(cairo, da->slot->cr_surface, 0, 0);
-            cairo_paint(cairo);
-        }
+        cairo_pattern_t *pattern = cairo_pattern_create_for_surface(da->slot->cr_surface);
+        cairo_matrix_t matrix;
+        cairo_matrix_init_scale (&matrix, 1./da->scale, 1./da->scale);
+        cairo_pattern_set_matrix (pattern, &matrix);
+        cairo_set_source(cairo, pattern);
+        cairo_paint(cairo);
+        cairo_pattern_destroy(pattern);
         
         pthread_mutex_unlock(&da->slot->lock);
     }
@@ -74,87 +68,125 @@ static gboolean displayarea_expose(GtkWidget *widget, GdkEventExpose *event, gpo
     cairo_destroy(cairo);
     return TRUE;
 }
-
-static gboolean displayarea_popup(GtkWidget *widget, GdkEventButton *event, gpointer da_)
+static void displayarea_update(struct displayarea *da);
+static void displayarea_zoomin(GtkWidget *widget, gpointer da_)
 {
-    if(event->type == GDK_BUTTON_PRESS && event->button == 3)
-    {
-        popup_da = (struct displayarea *)da_;
-        gtk_menu_popup(GTK_MENU(popup_menu),
-                       NULL, NULL, NULL, NULL,
-                       event->button, event->time);
-        return TRUE;
+    struct displayarea *da = (struct displayarea *)da_;
+    if(da->scale < 10) {
+        da->scale*=2.f;
+        displayarea_update(da);
     }
-
-    return FALSE;
+}
+static void displayarea_zoomout(GtkWidget *widget, gpointer da_)
+{
+    struct displayarea *da = (struct displayarea *)da_;
+    if(da->scale > .125) {
+        da->scale/=2.f;
+        displayarea_update(da);
+    }
 }
 
-static void displayarea_refresh(struct displayarea *da)
+static void displayarea_set_slot(struct displayarea *da, struct displayslot *ds);
+static void displayarea_select_slot(GtkWidget *widget, gpointer da_)
+{
+    struct displayarea *da = (struct displayarea *)da_;
+
+    GtkTreeIter iter;
+    if(!gtk_combo_box_get_active_iter(da->slotselect, &iter))
+        return;
+
+    struct displayslot *ds;
+    gtk_tree_model_get(GTK_TREE_MODEL(slotsModel), &iter,  0,&ds,  -1);
+    displayarea_set_slot(da,ds);
+}
+
+static void displayarea_init(struct displayarea *da)
+{
+    da->scale = 1;
+
+    da->root = GTK_VBOX(gtk_vbox_new(FALSE, 3));
+    da->scrolled_window = GTK_SCROLLED_WINDOW(gtk_scrolled_window_new(NULL,NULL));
+    da->area = GTK_LAYOUT(gtk_layout_new(NULL,NULL));
+    da->buttbox = GTK_HBOX(gtk_hbox_new(FALSE, 3));
+    da->slotselect = GTK_COMBO_BOX(gtk_combo_box_new_with_model(GTK_TREE_MODEL(slotsModel)));
+    da->zoomin = GTK_BUTTON(gtk_button_new());
+    da->zoomout = GTK_BUTTON(gtk_button_new());
+    da->caption = GTK_LABEL(gtk_label_new(""));
+
+    gtk_button_set_image(da->zoomin,  gtk_image_new_from_stock(GTK_STOCK_ZOOM_IN,  GTK_ICON_SIZE_BUTTON));
+    gtk_button_set_image(da->zoomout, gtk_image_new_from_stock(GTK_STOCK_ZOOM_OUT, GTK_ICON_SIZE_BUTTON));
+
+    {
+        GtkCellRenderer *crend = gtk_cell_renderer_text_new();
+        gtk_cell_layout_pack_start(GTK_CELL_LAYOUT(da->slotselect), crend, FALSE);
+        gtk_cell_layout_set_attributes(GTK_CELL_LAYOUT(da->slotselect), crend, "text", 1, NULL);
+    }
+
+    gtk_misc_set_alignment(GTK_MISC(da->caption), 0, .5);
+
+    gtk_box_pack_start(GTK_BOX(da->root), GTK_WIDGET(da->scrolled_window), TRUE,TRUE,2);
+    gtk_box_pack_start(GTK_BOX(da->root), GTK_WIDGET(da->buttbox), FALSE,FALSE,2);
+    gtk_box_pack_start(GTK_BOX(da->root), GTK_WIDGET(da->caption), FALSE,FALSE,2);
+
+    gtk_container_add(GTK_CONTAINER(da->scrolled_window), GTK_WIDGET(da->area));
+
+    gtk_box_pack_start(GTK_BOX(da->buttbox), GTK_WIDGET(da->slotselect), TRUE,TRUE,2);
+    gtk_box_pack_start(GTK_BOX(da->buttbox), GTK_WIDGET(da->zoomin), FALSE,FALSE,2);
+    gtk_box_pack_start(GTK_BOX(da->buttbox), GTK_WIDGET(da->zoomout), FALSE,FALSE,2);
+
+    gtk_widget_show_all(GTK_WIDGET(da->root));
+
+    gtk_scrolled_window_set_policy(da->scrolled_window, GTK_POLICY_AUTOMATIC, GTK_POLICY_AUTOMATIC); 
+    gtk_scrolled_window_set_shadow_type(da->scrolled_window, GTK_SHADOW_IN);
+
+    g_signal_connect(G_OBJECT(da->area), "expose_event",
+                     G_CALLBACK(displayarea_expose), da);
+    g_signal_connect(G_OBJECT(da->zoomin), "clicked",
+                     G_CALLBACK (displayarea_zoomin), da);
+    g_signal_connect(G_OBJECT(da->zoomout), "clicked",
+                     G_CALLBACK (displayarea_zoomout), da);
+    g_signal_connect(G_OBJECT(da->slotselect), "changed",
+                     G_CALLBACK (displayarea_select_slot), da);
+
+    g_object_ref(G_OBJECT(da->root));
+}
+
+static void displayarea_cleanup(struct displayarea *da)
+{
+    gtk_widget_destroy(GTK_WIDGET(da->root));
+}
+
+
+static void displayarea_update(struct displayarea *da)
 {
     if(da->slot) {
-        gtk_layout_set_size(da->area, da->slot->width, da->slot->height);
-        gtk_widget_set_size_request(GTK_WIDGET(da->area), da->slot->width, da->slot->height);
+        int w = da->slot->width*da->scale, h = da->slot->height*da->scale;
+        gtk_layout_set_size(da->area, w,h);
     }
     gtk_widget_queue_draw(GTK_WIDGET(da->area));
 }
 
+static void displayarea_recaption(struct displayarea *da) {
+    gtk_label_set_text(da->caption, da->slot ? da->slot->caption : "");
+}
+
 static void displayarea_set_slot(struct displayarea *da, struct displayslot *ds)
 {
+    GtkTreeIter iter;
+    gtk_tree_model_get_iter_first(GTK_TREE_MODEL(slotsModel), &iter);
+    do {
+        struct displayslot *ds_;
+        gtk_tree_model_get(GTK_TREE_MODEL(slotsModel), &iter,  0,&ds_,  -1);
+        if(ds_ == ds) {
+            gtk_combo_box_set_active_iter(da->slotselect, &iter);
+            break;
+        }
+    } while(gtk_tree_model_iter_next(GTK_TREE_MODEL(slotsModel), &iter));
+
     da->slot = ds;
-    if(ds) {
-        gtk_label_set_text(da->name, ds->name);
-        gtk_label_set_text(da->caption, ds->caption);
-    } else {
-        gtk_label_set_text(da->name, "[empty]");
-        gtk_label_set_text(da->caption, "[empty]");
-    }
-    displayarea_refresh(da);
+    displayarea_update(da);
+    displayarea_recaption(da);
 }
-
-static struct displayarea *displayarea_create(void)
-{
-    struct displayarea *da = malloc(sizeof(struct displayarea));
-
-    da->vbox = GTK_VBOX(gtk_vbox_new(FALSE, 3));
-
-    da->area = GTK_LAYOUT(gtk_layout_new(NULL,NULL));
-    da->scrolled_window = GTK_SCROLLED_WINDOW(gtk_scrolled_window_new(NULL,NULL));
-    da->name = GTK_LABEL(gtk_label_new(""));
-    da->caption = GTK_LABEL(gtk_label_new(""));
-
-    gtk_misc_set_alignment(GTK_MISC(da->caption), 0,0.5);
-
-    gtk_container_add(GTK_CONTAINER(da->scrolled_window), GTK_WIDGET(da->area));
-    gtk_box_pack_start(GTK_BOX(da->vbox), GTK_WIDGET(da->scrolled_window), TRUE,TRUE,0);
-    gtk_box_pack_start(GTK_BOX(da->vbox), GTK_WIDGET(da->name), FALSE,FALSE,0);
-    gtk_box_pack_start(GTK_BOX(da->vbox), GTK_WIDGET(da->caption), FALSE,FALSE,0);
-
-    gtk_widget_show_all(GTK_WIDGET(da->vbox));
-
-    displayarea_set_slot(da, NULL);
-   
-    gtk_scrolled_window_set_policy(da->scrolled_window, GTK_POLICY_AUTOMATIC, GTK_POLICY_AUTOMATIC); 
-    gtk_layout_set_size(da->area, 100, 100);
-    gtk_widget_set_size_request(GTK_WIDGET(da->area), 100,100);
-
-    g_signal_connect(G_OBJECT(da->area), "expose_event",
-                     G_CALLBACK(displayarea_expose), da);
-    g_signal_connect(G_OBJECT(da->area), "button_press_event",
-                     G_CALLBACK (displayarea_popup), da);
-
-    gtk_widget_add_events(GTK_WIDGET(da->area), GDK_BUTTON_PRESS_MASK);
-
-    g_object_ref(G_OBJECT(da->vbox));
-
-    return da;
-}
-
-static void displayarea_destroy(struct displayarea *da)
-{
-    gtk_widget_destroy(GTK_WIDGET(da->vbox));
-    free(da);
-}
-
 
 /* ------------------------------------------------------------------------- */
 
@@ -163,14 +195,10 @@ enum {
     DS_UPDATE = 2,
     DS_RENAME = 4,
     DS_RECAPTION = 8,
-    DS_CLEANUP = 16,
+    DS_BIND = 16,
+    DS_UNBIND = 32,
+    DS_CLEANUP = 64,
 };
-
-static void displayslot_init2(struct displayslot *ds);
-static void displayslot_update2(struct displayslot *ds);
-static void displayslot_rename2(struct displayslot *ds);
-static void displayslot_recaption2(struct displayslot *ds);
-static void displayslot_cleanup2(struct displayslot *ds);
 
 static int efd;
 
@@ -185,13 +213,43 @@ static gboolean efd_readable(GIOChannel *chan, GIOCondition cond, gpointer data)
         struct displayslot *ds = p->data;
         pthread_mutex_lock(&ds->lock);
 
-        if(ds->events & DS_INIT) displayslot_init2(ds);
-        if(ds->events & DS_UPDATE) displayslot_update2(ds);
-        if(ds->events & DS_RENAME) displayslot_rename2(ds);
-        if(ds->events & DS_RECAPTION) displayslot_recaption2(ds);
-        if(ds->events & DS_CLEANUP) displayslot_cleanup2(ds);
-        ds->events = 0;
+        GtkTreeIter *iter = (GtkTreeIter *)&ds->iter;
+
+        if(ds->events & DS_INIT) 
+            gtk_list_store_insert_with_values(slotsModel,iter,2000000000,  0,ds,  1,ds->name, -1);
         
+        if(ds->events & DS_RENAME)
+            gtk_list_store_set(slotsModel, iter, 1,ds->name, -1);
+        
+        if(ds->events & DS_RECAPTION)
+            for(int i=0; i<4; i++)
+                if(areas[i].slot == ds)
+                    displayarea_recaption(&areas[i]);
+        
+        if(ds->events & DS_UPDATE)
+            for(int i=0; i<4; i++)
+                if(areas[i].slot == ds)
+                    displayarea_update(&areas[i]);
+
+        if(ds->events & DS_BIND)
+            for(int i=0; i<4; i++)
+                if(areas[i].slot == NULL) {
+                    displayarea_set_slot(&areas[i], ds);
+                    break;
+                }
+        if(ds->events & DS_UNBIND)
+            for(int i=0; i<4; i++)
+                if(areas[i].slot == ds)
+                    displayarea_set_slot(&areas[i], NULL);
+
+        if(ds->events & DS_CLEANUP) {
+            for(int i=0; i<4; i++)
+                if(areas[i].slot == ds)
+                    displayarea_set_slot(&areas[i], NULL);
+            gtk_list_store_remove(slotsModel, iter);
+        }
+
+        ds->events = 0;
         pthread_cond_broadcast(&ds->cond);
         pthread_mutex_unlock(&ds->lock);
     }
@@ -215,104 +273,81 @@ static void efd_poke(void)
 
 /* ------------------------------------------------------------------------- */
 
-static gboolean displayslot_selected(GtkWidget *widget, gpointer ds_)
+static void displayslot_surface_resize(struct displayslot *ds, int width, int height)
 {
-    displayarea_set_slot(popup_da, (struct displayslot *)ds_);
-    return TRUE;
-}
+    if(ds->width == width && ds->height == height)
+        return;
 
-static void displayslot_init2(struct displayslot *ds)
+    if(ds->cr_surface)
+        cairo_surface_destroy(ds->cr_surface);
+
+    int stride = cairo_format_stride_for_width(CAIRO_FORMAT_RGB24, width);
+
+    ds->data = realloc(ds->data, height*stride);
+    ds->width = width;
+    ds->height = height;
+    ds->stride = stride;
+
+    ds->cr_surface =
+        cairo_image_surface_create_for_data(
+                ds->data, CAIRO_FORMAT_RGB24, width, height, stride);
+}
+static void displayslot_surface_init(struct displayslot *ds)
 {
     ds->width = ds->height = ds->stride = -1;
-    ds->cr_surface = ds->data = NULL;
-    ds->name = strdup("new display slot");
-    ds->caption = strdup("");
-
-    ds->menuitem = gtk_menu_item_new_with_label(ds->name);
-    gtk_menu_shell_prepend(GTK_MENU_SHELL(popup_menu), GTK_WIDGET(ds->menuitem));
-    gtk_widget_show_all(GTK_WIDGET(ds->menuitem));
-    
-    g_signal_connect(G_OBJECT(ds->menuitem), "activate",
-                     G_CALLBACK(displayslot_selected), ds);
+    ds->data = NULL; ds->cr_surface = NULL;
+    displayslot_surface_resize(ds, 128,128);
 }
-
-static void displayslot_cleanup2(struct displayslot *ds)
+static void displayslot_surface_destroy(struct displayslot *ds)
 {
     if(ds->cr_surface)
         cairo_surface_destroy(ds->cr_surface);
     free(ds->data);
-    free(ds->name);
-    free(ds->caption);
-    
-    for(GList *p = areas; p; p = p->next) {
-        struct displayarea *da = p->data;
-        if(da->slot == ds) 
-            displayarea_set_slot(da, NULL);
-    }
-
-    gtk_widget_destroy(GTK_WIDGET(ds->menuitem));
 }
 
-static void displayslot_rename2(struct displayslot *ds)
-{
-    gtk_menu_item_set_label(GTK_MENU_ITEM(ds->menuitem), ds->name);
-    for(GList *p = areas; p; p = p->next) {
-        struct displayarea *da = p->data;
-        if(da->slot == ds)
-            gtk_label_set_text(da->name, ds->name);
-    }
-}
-static void displayslot_recaption2(struct displayslot *ds)
-{
-    for(GList *p = areas; p; p = p->next) {
-        struct displayarea *da = p->data;
-        if(da->slot == ds)
-            gtk_label_set_text(da->caption, ds->caption);
-    }
-}
-static void displayslot_update2(struct displayslot *ds)
-{
-    for(GList *p = areas; p; p = p->next) {
-        struct displayarea *da = p->data;
-        if(da->slot == ds)
-            displayarea_refresh(da);
-    }
-}
 
 static void displayslot_event(struct displayslot *ds, int ev) {
     ds->events |= ev;
     efd_poke();
 }
-
 static void displayslot_event_sync(struct displayslot *ds, int ev)
 {
-    pthread_mutex_lock(&ds->lock);
     displayslot_event(ds, ev);
     pthread_cond_wait(&ds->cond, &ds->lock);
-    pthread_mutex_unlock(&ds->lock);
 }
 
-
-void displayslot_init(struct displayslot *ds)
+void displayslot_init(struct displayslot *ds, char *name)
 {
     pthread_mutex_init(&ds->lock, NULL);
     pthread_cond_init(&ds->cond, NULL);
+
     ds->events = 0;
+    ds->name = name;
+    ds->caption = strdup("");
+    displayslot_surface_init(ds);
 
     pthread_mutex_lock(&slots_lock);
     slots = g_list_prepend(slots, ds);
     pthread_mutex_unlock(&slots_lock);
 
+    pthread_mutex_lock(&ds->lock);
     displayslot_event_sync(ds, DS_INIT);
+    pthread_mutex_unlock(&ds->lock);
 }
 
 void displayslot_cleanup(struct displayslot *ds)
 {
+    pthread_mutex_lock(&ds->lock);
     displayslot_event_sync(ds, DS_CLEANUP);
+    pthread_mutex_unlock(&ds->lock);
     
     pthread_mutex_lock(&slots_lock);
     slots = g_list_remove(slots, ds);
     pthread_mutex_unlock(&slots_lock);
+    
+    displayslot_surface_destroy(ds);
+    free(ds->caption);
+    free(ds->name);
 
     pthread_cond_destroy(&ds->cond);
     pthread_mutex_destroy(&ds->lock);
@@ -321,52 +356,34 @@ void displayslot_cleanup(struct displayslot *ds)
 void displayslot_rename(struct displayslot *ds, char *name)
 {
     pthread_mutex_lock(&ds->lock);
-
     free(ds->name);
     ds->name = name;
     displayslot_event(ds, DS_RENAME);
-
     pthread_mutex_unlock(&ds->lock);
 }
 
 void displayslot_recaption(struct displayslot *ds, char *caption)
 {
     pthread_mutex_lock(&ds->lock);
-
     free(ds->caption);
     ds->caption = caption;
     displayslot_event(ds, DS_RECAPTION);
-
     pthread_mutex_unlock(&ds->lock);
 }
 
 void displayslot_update(struct displayslot *ds, int width, int height, const void *data)
 {
     pthread_mutex_lock(&ds->lock);
-        
-    if(ds->width != width || ds->height != height || ds->data == NULL)
-    {
-        if(ds->cr_surface)
-            cairo_surface_destroy(ds->cr_surface);
 
-        int stride = cairo_format_stride_for_width(CAIRO_FORMAT_ARGB32, width);
-
-        ds->data = realloc(ds->data, height*stride);
-        ds->width = width;
-        ds->height = height;
-        ds->stride = stride;
-
-        ds->cr_surface =
-            cairo_image_surface_create_for_data(
-                    ds->data, CAIRO_FORMAT_ARGB32, width, height, stride);
-    }
+    displayslot_surface_resize(ds, width, height);    
 
     for(int y=0; y<height; y++)
         for(int x=0; x<width; x++)
         {
+            uint32_t transparency = (((x>>4)^(y>>4)) & 1) ? 0xe0e0e0 : 0xc0c0c0;
             uint8_t src = ((uint8_t *)data)[x + y*width];
             uint32_t *dst = (uint32_t *)((uint8_t *)ds->data + y*ds->stride) + x;
-            *dst = src ? (0x00010101 * src + 0xff000000) : 0x00000000;
+            *dst = src ? (0x010101 * src) : transparency;
         }
 
     displayslot_event(ds, DS_UPDATE);
@@ -374,177 +391,57 @@ void displayslot_update(struct displayslot *ds, int width, int height, const voi
     pthread_mutex_unlock(&ds->lock);
 }
 
+void displayslot_bind(struct displayslot *ds)
+{
+    pthread_mutex_lock(&ds->lock);
+    displayslot_event(ds, DS_BIND);
+    pthread_mutex_unlock(&ds->lock);
+}
+
+void displayslot_unbind(struct displayslot *ds)
+{
+    pthread_mutex_lock(&ds->lock);
+    displayslot_event(ds, DS_UNBIND);
+    pthread_mutex_unlock(&ds->lock);
+}
+
 /* ------------------------------------------------------------------------- */
+
+/* these are tentative definitions (ever heard of them?), supplemented with
+ * initialization data at the end of this file. */
+static const guint8 icoSingle[] __attribute__ ((__aligned__ (4)));
+static const guint8 icoVsplit[] __attribute__ ((__aligned__ (4)));
+static const guint8 icoHsplit[] __attribute__ ((__aligned__ (4)));
+static const guint8 icoQuad[] __attribute__ ((__aligned__ (4)));
+
+static GtkToolbar *toolbar;
+static GtkToolButton *single, *hsplit, *vsplit, *quad;
 
 static void gui_destroy(GtkWidget *widget, gpointer data)
 {
     gtk_main_quit();
 }
 
-static void gui_empty(struct displayarea *da, int row, int col)
+static void gui_toggle_split_mode(GtkWidget *widget, gpointer _mode)
 {
-    displayarea_set_slot(popup_da, NULL);
+    int mode = (int)_mode;
+    gtk_widget_show(GTK_WIDGET(areas[0].root));
+    gtk_widget_set_visible(GTK_WIDGET(areas[1].root), mode == 1 || mode == 3);
+    gtk_widget_set_visible(GTK_WIDGET(areas[2].root), mode == 2 || mode == 3);
+    gtk_widget_set_visible(GTK_WIDGET(areas[3].root), mode == 3);
 }
 
-static void gui_attach_da(struct displayarea *da, int row, int col)
+static GtkToolButton *gui_make_split_btn(const guint8 icon[], int mode, int idx)
 {
-    gtk_table_attach(GTK_TABLE(table), GTK_WIDGET(da->vbox),
-                     col,col+1, row,row+1, GTK_EXPAND|GTK_FILL, GTK_EXPAND|GTK_FILL, 5,5);
-    da->row = row; da->col = col;
-}
-
-static void gui_detach_da(struct displayarea *da) {
-    gtk_container_remove(GTK_CONTAINER(table), GTK_WIDGET(da->vbox));
-}
-
-static gboolean gui_add_column(GtkWidget *widget, gpointer _unused)
-{
-    int rows, columns;
-    g_object_get(G_OBJECT(table), "n-rows", &rows, "n-columns", &columns, NULL);
-    columns++;
-    gtk_table_resize(GTK_TABLE(table), rows, columns);
-
-    for(int i=0; i<rows; i++) {
-        struct displayarea *da = displayarea_create();
-        areas = g_list_prepend(areas, da);
-        gui_attach_da(da, i, columns-1);
-    }
-
-    return TRUE;
-}
-static gboolean gui_del_column(GtkWidget *widget, gpointer _unused)
-{
-    int c = popup_da->col;
-
-    for(GList *p = areas; p; p = p->next)
-    {
-        struct displayarea *da = (struct displayarea *)p->data;
-        if(da->col == c) {
-            displayarea_destroy(da);
-            p->data = NULL;
-        } else if(da->col > c) 
-            gui_detach_da(da);
-    }
+    GtkWidget *img = gtk_image_new_from_pixbuf(
+        gdk_pixbuf_new_from_inline(-1, icon, TRUE, NULL));
+    GtkToolButton *btn = GTK_TOOL_BUTTON(gtk_tool_button_new(img, NULL));
     
-    for(GList *p = areas; p; p = p->next)
-    {
-        struct displayarea *da = (struct displayarea *)p->data;
-        if(da != NULL && da->col > c) 
-            gui_attach_da(da, da->row, da->col-1);
-    }
+    gtk_toolbar_insert(toolbar, GTK_TOOL_ITEM(btn), idx);
 
-    areas = g_list_remove_all(areas, NULL);
-    
-    int rows, columns;
-    g_object_get(G_OBJECT(table), "n-rows", &rows, "n-columns", &columns, NULL);
-    columns--;
-    gtk_table_resize(GTK_TABLE(table), rows, columns);
+    g_signal_connect(G_OBJECT(btn), "clicked", G_CALLBACK(gui_toggle_split_mode), (void *)mode);
 
-    return TRUE;
-}
-static gboolean gui_add_row(GtkWidget *widget, gpointer _unused)
-{
-    int rows, columns;
-    g_object_get(G_OBJECT(table), "n-rows", &rows, "n-columns", &columns, NULL);
-    rows++;
-    gtk_table_resize(GTK_TABLE(table), rows, columns);
-
-    for(int i=0; i<columns; i++) {
-        struct displayarea *da = displayarea_create();
-        areas = g_list_prepend(areas, da);
-        gui_attach_da(da, rows-1, i);
-    }
-
-    return TRUE;
-}
-static gboolean gui_del_row(GtkWidget *widget, gpointer _unused)
-{
-    int r = popup_da->row;
-
-    for(GList *p = areas; p; p = p->next)
-    {
-        struct displayarea *da = (struct displayarea *)p->data;
-        if(da->row == r) {
-            displayarea_destroy(da);
-            p->data = NULL;
-        } else if(da->row > r) 
-            gui_detach_da(da);
-    }
-    
-    for(GList *p = areas; p; p = p->next)
-    {
-        struct displayarea *da = (struct displayarea *)p->data;
-        if(da != NULL && da->row > r) 
-            gui_attach_da(da, da->row-1, da->col);
-    }
-
-    areas = g_list_remove_all(areas, NULL);
-    
-    int rows, columns;
-    g_object_get(G_OBJECT(table), "n-rows", &rows, "n-columns", &columns, NULL);
-    rows--;
-    gtk_table_resize(GTK_TABLE(table), rows, columns);
-
-    return TRUE;
-}
-
-static void popup_init()
-{
-    popup_menu = gtk_menu_new();
-
-    GtkWidget *item;
-   
-    item = gtk_menu_item_new_with_label("[empty]");
-    g_signal_connect(G_OBJECT(item), "activate", G_CALLBACK(gui_empty), NULL);
-    gtk_menu_shell_append(GTK_MENU_SHELL(popup_menu), item);
-
-    item = gtk_separator_menu_item_new();
-    gtk_menu_shell_append(GTK_MENU_SHELL(popup_menu), item);
-
-    item = gtk_menu_item_new_with_label("add row");
-    g_signal_connect(G_OBJECT(item), "activate", G_CALLBACK(gui_add_row), NULL);
-    gtk_menu_shell_append(GTK_MENU_SHELL(popup_menu), item);
-
-    item = gtk_menu_item_new_with_label("add column");
-    g_signal_connect(G_OBJECT(item), "activate", G_CALLBACK(gui_add_column), NULL);
-    gtk_menu_shell_append(GTK_MENU_SHELL(popup_menu), item);
-
-    item = gtk_menu_item_new_with_label("remove row");
-    g_signal_connect(G_OBJECT(item), "activate", G_CALLBACK(gui_del_row), NULL);
-    gtk_menu_shell_append(GTK_MENU_SHELL(popup_menu), item);
-
-    item = gtk_menu_item_new_with_label("remove column");
-    g_signal_connect(G_OBJECT(item), "activate", G_CALLBACK(gui_del_column), NULL);
-    gtk_menu_shell_append(GTK_MENU_SHELL(popup_menu), item);
-
-    gtk_widget_show_all(popup_menu);
-}
-
-static void table_init()
-{
-    table = gtk_table_new(1,1,0);
-    gtk_container_add(GTK_CONTAINER(window), GTK_WIDGET(table));
-
-    struct displayarea *da = displayarea_create();
-    areas = g_list_prepend(areas, da);
-    gui_attach_da(da,0,0);
-}
-
-static void transparency_pattern_init()
-{
-    int width = 32, height = 32;
-    int stride = cairo_format_stride_for_width(CAIRO_FORMAT_ARGB32, width);
-
-    void *pattern_data = malloc(stride*height);
-    for(int y=0; y<height; y++)
-        for(int x=0; x<width; x++)
-            *((uint32_t *)((uint8_t *)pattern_data + y*stride) + x)
-                = (((x>>4)^(y>>4)) & 1) ? 0xffe0e0e0 : 0xffc0c0c0;
-    
-    transparency_surface =
-        cairo_image_surface_create_for_data(
-                pattern_data, CAIRO_FORMAT_ARGB32, width, height, stride);
-
+    return btn;
 }
 
 struct thread_args {
@@ -563,17 +460,40 @@ static void *gui_thread(void *args_)
 
     pthread_mutex_init(&slots_lock, NULL);
     efd_init();
-    transparency_pattern_init();
-    popup_init();
 
-    window = gtk_window_new (GTK_WINDOW_TOPLEVEL);
+    slotsModel = gtk_list_store_new(4, G_TYPE_POINTER, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_INT);
+    { GtkTreeIter iter;
+      gtk_list_store_insert_with_values(slotsModel,&iter,0,  0,NULL,  1,"", -1); }
+
+    GtkWidget *window = gtk_window_new (GTK_WINDOW_TOPLEVEL);
     g_signal_connect(G_OBJECT(window), "delete-event", G_CALLBACK(gui_destroy), NULL);
-    gtk_container_set_border_width (GTK_CONTAINER (window), 10);
 
-    table_init();
+    displayarea_init(&areas[0]);
+    displayarea_init(&areas[1]);
+    displayarea_init(&areas[2]);
+    displayarea_init(&areas[3]);
+
+    toolbar = GTK_TOOLBAR(gtk_toolbar_new());
+    gtk_toolbar_set_style(GTK_TOOLBAR(toolbar), GTK_TOOLBAR_ICONS);
+    single  = gui_make_split_btn(icoSingle, 0, 0);
+    vsplit  = gui_make_split_btn(icoVsplit, 1, 1);
+    hsplit  = gui_make_split_btn(icoHsplit, 2, 2);
+    quad    = gui_make_split_btn(icoQuad,   3, 3);
+
+    GtkWidget *table = gtk_table_new(2,2,0);
+    gtk_container_set_border_width(GTK_CONTAINER(table), 10);
+    gtk_table_attach(GTK_TABLE(table), GTK_WIDGET(areas[0].root), 0,1,0,1,GTK_EXPAND|GTK_FILL,GTK_EXPAND|GTK_FILL,3,3);
+    gtk_table_attach(GTK_TABLE(table), GTK_WIDGET(areas[1].root), 1,2,0,1,GTK_EXPAND|GTK_FILL,GTK_EXPAND|GTK_FILL,3,3);
+    gtk_table_attach(GTK_TABLE(table), GTK_WIDGET(areas[2].root), 0,1,1,2,GTK_EXPAND|GTK_FILL,GTK_EXPAND|GTK_FILL,3,3);
+    gtk_table_attach(GTK_TABLE(table), GTK_WIDGET(areas[3].root), 1,2,1,2,GTK_EXPAND|GTK_FILL,GTK_EXPAND|GTK_FILL,3,3);
+    
+    GtkWidget *vbox = gtk_vbox_new(0,0);
+    gtk_box_pack_start(GTK_BOX(vbox), GTK_WIDGET(toolbar), FALSE,FALSE,0);
+    gtk_box_pack_start(GTK_BOX(vbox), table,               TRUE, TRUE, 0);
+    gtk_container_add(GTK_CONTAINER(window), vbox);
+    
     gtk_widget_show_all(window);
-
-    x11_display = gdk_x11_drawable_get_xdisplay(GDK_DRAWABLE(window->window));
+    gui_toggle_split_mode(NULL, (void *)0);
 
     pthread_mutex_lock(&args->lock);
     pthread_cond_broadcast(&args->cond);
@@ -604,7 +524,207 @@ void gui_gtk_init(int *argc, char ***argv)
     pthread_mutex_destroy(&args.lock);
 }
 
-void *gui_gtk_get_x11_display(void) {
-    return x11_display;
-}
+/* ------------------------------------------------------------------------- */
+
+static const guint8 icoSingle[] __attribute__ ((__aligned__ (4))) = 
+{ ""
+  /* Pixbuf magic (0x47646b50) */
+  "GdkP"
+  /* length: header (24) + pixel_data (626) */
+  "\0\0\2\212"
+  /* pixdata_type (0x2010001) */
+  "\2\1\0\1"
+  /* rowstride (96) */
+  "\0\0\0`"
+  /* width (32) */
+  "\0\0\0\40"
+  /* height (32) */
+  "\0\0\0\40"
+  /* pixel_data: */
+  "\2PPPMMM\234PPP\4MMMPPPMMM\330\330\330\234\354\354\354\4\330\330\330"
+  "MMMNNN\353\353\353\234\372\372\372\4\353\353\353NNNMMN\353\353\353\234"
+  "\372\372\372\1\353\353\353\202MMM\1\353\353\353\234\372\372\372\4\353"
+  "\353\353MMMLLL\352\352\352\234\372\372\372\5\352\352\352LLLKKK\351\351"
+  "\351\371\371\371\232\372\372\372\5\371\371\371\351\351\351KKKJJJ\351"
+  "\351\351\234\371\371\371\5\351\351\351JJJJII\351\350\350\370\370\370"
+  "\232\371\371\371\5\370\370\370\351\350\351JJIIII\350\350\350\234\370"
+  "\370\370\4\350\350\350IIIHHH\347\347\347\234\370\370\370\5\347\347\347"
+  "HHHGGG\346\346\346\367\367\367\232\370\370\370\5\367\367\367\346\346"
+  "\346GGGFFF\345\345\345\234\367\367\367\1\345\345\345\202FFF\2\345\345"
+  "\345\367\366\366\232\367\367\367\6\367\367\366\345\345\345FFFEEE\345"
+  "\345\345\366\366\366\232\367\367\367\6\366\366\366\345\345\345EEEDDD"
+  "\344\344\344\365\365\365\232\366\366\366\5\365\365\365\344\344\344DD"
+  "DCCC\343\343\343\234\365\365\365\5\343\343\343CCCBBC\342\343\342\364"
+  "\364\364\232\365\365\365\5\364\364\364\343\343\342CCCBBB\342\342\342"
+  "\234\364\364\364\4\342\342\342BBBAAA\341\341\341\234\364\364\364\5\341"
+  "\341\341AAA@@@\340\340\340\363\363\363\232\364\364\364\5\363\363\363"
+  "\340\340\340@@@\77\77\77\337\337\337\234\363\363\363\1\337\337\337\202"
+  "\77\77\77\2\337\337\337\362\362\362\232\363\363\363\6\362\362\363\337"
+  "\337\337\77\77\77>>>\336\336\336\362\362\362\232\363\363\363\5\362\362"
+  "\362\336\336\336>>>===\336\336\336\234\362\362\362\5\336\336\336===<"
+  "<<\335\335\335\361\361\361\232\362\362\362\6\361\361\361\335\335\335"
+  "<<<;;;\335\334\334\360\360\360\232\361\361\361\5\360\360\360\335\335"
+  "\335<<;;;;\334\334\334\234\360\360\360\4\334\334\334;;;:::\333\333\333"
+  "\234\360\360\360\5\333\333\333:::999\330\330\330\356\356\356\232\357"
+  "\357\357\6\356\356\356\330\330\330999777\271\271\271\330\327\327\232"
+  "\330\330\330\5\330\327\330\271\271\271777888555\234888\2""555888"};
+
+
+static const guint8 icoVsplit[] __attribute__ ((__aligned__ (4))) = 
+{ ""
+  /* Pixbuf magic (0x47646b50) */
+  "GdkP"
+  /* length: header (24) + pixel_data (956) */
+  "\0\0\3\324"
+  /* pixdata_type (0x2010001) */
+  "\2\1\0\1"
+  /* rowstride (96) */
+  "\0\0\0`"
+  /* width (32) */
+  "\0\0\0\40"
+  /* height (32) */
+  "\0\0\0\40"
+  /* pixel_data: */
+  "\2PPPMMM\234PPP\4MMMPPPMMM\330\330\330\215\354\354\354\2bbb\337\337\337"
+  "\215\354\354\354\4\330\330\330MMMNNN\353\353\353\215\372\372\372\2bb"
+  "b\337\337\337\215\372\372\372\4\353\353\353NNNMMN\353\353\353\215\372"
+  "\372\372\2bbb\337\337\337\215\372\372\372\1\353\353\353\202MMM\1\353"
+  "\353\353\215\372\372\372\2bbb\337\337\337\215\372\372\372\4\353\353\353"
+  "MMMLLL\352\352\352\215\372\372\372\2bbb\337\337\337\215\372\372\372\5"
+  "\352\352\352LLLKKK\351\351\351\371\371\371\214\372\372\372\2bbb\337\337"
+  "\337\214\372\372\372\5\371\371\371\351\351\351KKKJJJ\351\351\351\215"
+  "\371\371\371\2bbb\337\337\337\215\371\371\371\5\351\351\351JJJJII\351"
+  "\350\350\370\370\370\214\371\371\371\2bbb\337\337\337\214\371\371\371"
+  "\5\370\370\370\351\350\351JJIIII\350\350\350\215\370\370\370\2bbb\337"
+  "\337\337\215\370\370\370\4\350\350\350IIIHHH\347\347\347\215\370\370"
+  "\370\2bbb\337\337\337\215\370\370\370\5\347\347\347HHHGGG\346\346\346"
+  "\367\367\367\214\370\370\370\2bbb\337\337\337\214\370\370\370\5\367\367"
+  "\367\346\346\346GGGFFF\345\345\345\215\367\367\367\2bbb\337\337\337\215"
+  "\367\367\367\1\345\345\345\202FFF\2\345\345\345\367\366\366\214\367\367"
+  "\367\2bbb\337\337\337\214\367\367\367\6\367\367\366\345\345\345FFFEE"
+  "E\345\345\345\366\366\366\214\367\367\367\2bbb\337\337\337\214\367\367"
+  "\367\6\366\366\366\345\345\345EEEDDD\344\344\344\365\365\365\214\366"
+  "\366\366\2bbb\337\337\337\214\366\366\366\5\365\365\365\344\344\344D"
+  "DDCCC\343\343\343\215\365\365\365\2bbb\337\337\337\215\365\365\365\5"
+  "\343\343\343CCCBBC\342\343\342\364\364\364\214\365\365\365\2bbb\337\337"
+  "\337\214\365\365\365\5\364\364\364\343\343\342CCCBBB\342\342\342\215"
+  "\364\364\364\2bbb\337\337\337\215\364\364\364\4\342\342\342BBBAAA\341"
+  "\341\341\215\364\364\364\2bbb\337\337\337\215\364\364\364\5\341\341\341"
+  "AAA@@@\340\340\340\363\363\363\214\364\364\364\2bbb\337\337\337\214\364"
+  "\364\364\5\363\363\363\340\340\340@@@\77\77\77\337\337\337\215\363\363"
+  "\363\2bbb\337\337\337\215\363\363\363\1\337\337\337\202\77\77\77\2\337"
+  "\337\337\362\362\362\214\363\363\363\2bbb\337\337\337\214\363\363\363"
+  "\6\362\362\363\337\337\337\77\77\77>>>\336\336\336\362\362\362\214\363"
+  "\363\363\2bbb\337\337\337\214\363\363\363\5\362\362\362\336\336\336>"
+  ">>===\336\336\336\215\362\362\362\2bbb\337\337\337\215\362\362\362\5"
+  "\336\336\336===<<<\335\335\335\361\361\361\214\362\362\362\2bbb\337\337"
+  "\337\214\362\362\362\6\361\361\361\335\335\335<<<;;;\335\334\334\360"
+  "\360\360\214\361\361\361\2bbb\337\337\337\214\361\361\361\5\360\360\360"
+  "\335\335\335<<;;;;\334\334\334\215\360\360\360\2bbb\337\337\337\215\360"
+  "\360\360\4\334\334\334;;;:::\333\333\333\215\360\360\360\2bbb\337\337"
+  "\337\215\360\360\360\5\333\333\333:::999\330\330\330\356\356\356\214"
+  "\357\357\357\2bbb\337\337\337\214\357\357\357\6\356\356\356\330\330\330"
+  "999777\271\271\271\330\327\327\214\330\330\330\2bbb\337\337\337\214\330"
+  "\330\330\5\330\327\330\271\271\271777888555\234888\2""555888"};
+
+
+static const guint8 icoHsplit[] __attribute__ ((__aligned__ (4))) = 
+{ ""
+  /* Pixbuf magic (0x47646b50) */
+  "GdkP"
+  /* length: header (24) + pixel_data (608) */
+  "\0\0\2x"
+  /* pixdata_type (0x2010001) */
+  "\2\1\0\1"
+  /* rowstride (96) */
+  "\0\0\0`"
+  /* width (32) */
+  "\0\0\0\40"
+  /* height (32) */
+  "\0\0\0\40"
+  /* pixel_data: */
+  "\2PPPMMM\234PPP\4MMMPPPMMM\330\330\330\234\354\354\354\4\330\330\330"
+  "MMMNNN\353\353\353\234\372\372\372\4\353\353\353NNNMMN\353\353\353\234"
+  "\372\372\372\1\353\353\353\202MMM\1\353\353\353\234\372\372\372\4\353"
+  "\353\353MMMLLL\352\352\352\234\372\372\372\5\352\352\352LLLKKK\351\351"
+  "\351\371\371\371\232\372\372\372\5\371\371\371\351\351\351KKKJJJ\351"
+  "\351\351\234\371\371\371\5\351\351\351JJJJII\351\350\350\370\370\370"
+  "\232\371\371\371\5\370\370\370\351\350\351JJIIII\350\350\350\234\370"
+  "\370\370\4\350\350\350IIIHHH\347\347\347\234\370\370\370\5\347\347\347"
+  "HHHGGG\346\346\346\367\367\367\232\370\370\370\5\367\367\367\346\346"
+  "\346GGGFFF\345\345\345\234\367\367\367\1\345\345\345\202FFF\2\345\345"
+  "\345\367\366\366\232\367\367\367\6\367\367\366\345\345\345FFFEEE\345"
+  "\345\345\366\366\366\232\367\367\367\4\366\366\366\345\345\345EEEDDD"
+  "\236bbb\2DDDCCC\236\337\337\337\4CCCBBC\342\343\342\364\364\364\232\365"
+  "\365\365\5\364\364\364\343\343\342CCCBBB\342\342\342\234\364\364\364"
+  "\4\342\342\342BBBAAA\341\341\341\234\364\364\364\5\341\341\341AAA@@@"
+  "\340\340\340\363\363\363\232\364\364\364\5\363\363\363\340\340\340@@"
+  "@\77\77\77\337\337\337\234\363\363\363\1\337\337\337\202\77\77\77\2\337"
+  "\337\337\362\362\362\232\363\363\363\6\362\362\363\337\337\337\77\77"
+  "\77>>>\336\336\336\362\362\362\232\363\363\363\5\362\362\362\336\336"
+  "\336>>>===\336\336\336\234\362\362\362\5\336\336\336===<<<\335\335\335"
+  "\361\361\361\232\362\362\362\6\361\361\361\335\335\335<<<;;;\335\334"
+  "\334\360\360\360\232\361\361\361\5\360\360\360\335\335\335<<;;;;\334"
+  "\334\334\234\360\360\360\4\334\334\334;;;:::\333\333\333\234\360\360"
+  "\360\5\333\333\333:::999\330\330\330\356\356\356\232\357\357\357\6\356"
+  "\356\356\330\330\330999777\271\271\271\330\327\327\232\330\330\330\5"
+  "\330\327\330\271\271\271777888555\234888\2""555888"};
+
+
+static const guint8 icoQuad[] __attribute__ ((__aligned__ (4))) =
+{ ""
+  /* Pixbuf magic (0x47646b50) */
+  "GdkP"
+  /* length: header (24) + pixel_data (927) */
+  "\0\0\3\267"
+  /* pixdata_type (0x2010001) */
+  "\2\1\0\1"
+  /* rowstride (96) */
+  "\0\0\0`"
+  /* width (32) */
+  "\0\0\0\40"
+  /* height (32) */
+  "\0\0\0\40"
+  /* pixel_data: */
+  "\2PPPMMM\234PPP\4MMMPPPMMM\330\330\330\215\354\354\354\2bbb\337\337\337"
+  "\215\354\354\354\4\330\330\330MMMNNN\353\353\353\215\372\372\372\2bb"
+  "b\337\337\337\215\372\372\372\4\353\353\353NNNMMN\353\353\353\215\372"
+  "\372\372\2bbb\337\337\337\215\372\372\372\1\353\353\353\202MMM\1\353"
+  "\353\353\215\372\372\372\2bbb\337\337\337\215\372\372\372\4\353\353\353"
+  "MMMLLL\352\352\352\215\372\372\372\2bbb\337\337\337\215\372\372\372\5"
+  "\352\352\352LLLKKK\351\351\351\371\371\371\214\372\372\372\2bbb\337\337"
+  "\337\214\372\372\372\5\371\371\371\351\351\351KKKJJJ\351\351\351\215"
+  "\371\371\371\2bbb\337\337\337\215\371\371\371\5\351\351\351JJJJII\351"
+  "\350\350\370\370\370\214\371\371\371\2bbb\337\337\337\214\371\371\371"
+  "\5\370\370\370\351\350\351JJIIII\350\350\350\215\370\370\370\2bbb\337"
+  "\337\337\215\370\370\370\4\350\350\350IIIHHH\347\347\347\215\370\370"
+  "\370\2bbb\337\337\337\215\370\370\370\5\347\347\347HHHGGG\346\346\346"
+  "\367\367\367\214\370\370\370\2bbb\337\337\337\214\370\370\370\5\367\367"
+  "\367\346\346\346GGGFFF\345\345\345\215\367\367\367\2bbb\337\337\337\215"
+  "\367\367\367\1\345\345\345\202FFF\2\345\345\345\367\366\366\214\367\367"
+  "\367\2bbb\337\337\337\214\367\367\367\6\367\367\366\345\345\345FFFEE"
+  "E\345\345\345\366\366\366\214\367\367\367\2bbb\337\337\337\214\367\367"
+  "\367\4\366\366\366\345\345\345EEEDDD\236bbb\2DDDCCC\216\337\337\337\1"
+  "bbb\216\337\337\337\5\343\343\343CCCBBC\342\343\342\364\364\364\214\365"
+  "\365\365\2bbb\337\337\337\214\365\365\365\5\364\364\364\343\343\342C"
+  "CCBBB\342\342\342\215\364\364\364\2bbb\337\337\337\215\364\364\364\4"
+  "\342\342\342BBBAAA\341\341\341\215\364\364\364\2bbb\337\337\337\215\364"
+  "\364\364\5\341\341\341AAA@@@\340\340\340\363\363\363\214\364\364\364"
+  "\2bbb\337\337\337\214\364\364\364\5\363\363\363\340\340\340@@@\77\77"
+  "\77\337\337\337\215\363\363\363\2bbb\337\337\337\215\363\363\363\1\337"
+  "\337\337\202\77\77\77\2\337\337\337\362\362\362\214\363\363\363\2bbb"
+  "\337\337\337\214\363\363\363\6\362\362\363\337\337\337\77\77\77>>>\336"
+  "\336\336\362\362\362\214\363\363\363\2bbb\337\337\337\214\363\363\363"
+  "\5\362\362\362\336\336\336>>>===\336\336\336\215\362\362\362\2bbb\337"
+  "\337\337\215\362\362\362\5\336\336\336===<<<\335\335\335\361\361\361"
+  "\214\362\362\362\2bbb\337\337\337\214\362\362\362\6\361\361\361\335\335"
+  "\335<<<;;;\335\334\334\360\360\360\214\361\361\361\2bbb\337\337\337\214"
+  "\361\361\361\5\360\360\360\335\335\335<<;;;;\334\334\334\215\360\360"
+  "\360\2bbb\337\337\337\215\360\360\360\4\334\334\334;;;:::\333\333\333"
+  "\215\360\360\360\2bbb\337\337\337\215\360\360\360\5\333\333\333:::99"
+  "9\330\330\330\356\356\356\214\357\357\357\2bbb\337\337\337\214\357\357"
+  "\357\6\356\356\356\330\330\330999777\271\271\271\330\327\327\214\330"
+  "\330\330\2bbb\337\337\337\214\330\330\330\5\330\327\330\271\271\2717"
+  "77888555\234888\2""555888"};
+
 

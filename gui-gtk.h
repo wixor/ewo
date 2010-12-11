@@ -9,27 +9,32 @@ extern "C" {
 
 struct displayslot
 {
-    int events;
+    int events; /* events queued up to this point */
     
-    int width, height, stride;
-    void *data, *cr_surface; /* cairo_sufrace_t *cr_surface, actually */
+    char *name, *caption; /* pointers to temporary storage where new name or new caption is kept */
 
-    char *name, *caption;
-    void *menuitem; /* GtkMenuItem *menuitem, actually */
+    int width, height, stride; /* the surface data parameters */
+    void *data; /* the surface data */
+    void *cr_surface; /* the cairo_sufrace_t * */
+
+    struct {
+        int stamp;
+        void *user_data, *user_data2, *user_data3;
+    } iter;
 
     pthread_mutex_t lock;
     pthread_cond_t cond;
 };
 
-
-void displayslot_init(struct displayslot *ds);
+void displayslot_init(struct displayslot *ds, char *name);
 void displayslot_cleanup(struct displayslot *ds);
 void displayslot_rename(struct displayslot *ds, char *name);
 void displayslot_recaption(struct displayslot *ds, char *caption);
 void displayslot_update(struct displayslot *ds, int width, int height, const void *data);
+void displayslot_bind(struct displayslot *ds);
+void displayslot_unbind(struct displayslot *ds);
 
 void gui_gtk_init(int *argc, char ***argv);
-void *gui_gtk_get_x11_display(void);
 
 #ifdef __cplusplus
 } /* extern "C" */
