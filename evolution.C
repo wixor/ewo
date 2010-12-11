@@ -1,23 +1,85 @@
-#include <cmath>
-#include <vector>
 #include <cstdlib>
+#include <cmath>
+#include <cassert>
+#include <ctype.h>
 #include <unistd.h>
+#include <vector>
 #include <algorithm>
+#include <stdexcept>
 
 #include "poi.h"
 #include "evolution.h"
 #include "workers.h"
 #include "gui.h"
 #include "image.h"
+#include "config.h"
+
 
 #define debug(fmt, ...) fprintf(stderr, fmt, ## __VA_ARGS__)
 
-inline float randomFloat(float maxv = 1.0f) //jednostajnie z przedziału [0, 1), 
-{ 
-    return maxv*(float)(rand()%1000000)/1000000.0f+(float)(rand()%1000000)/1000000000000.0f; 
+/* ------------------------------------------------------------------------ */
+
+static void parsePOIScales(const char *value);
+
+static int cfgThreads;
+static int cfgPOISteps;
+static std::vector<float> cfgPOIScales;
+static float cfgPOIThreshold;
+static int cfgPOICount;
+static int cfgPopulationSize;
+static float cfgSurvivalRate;
+static float cfgTranslateInit, cfgRotateInit, cfgScaleInit;
+static float cfgTranslateProp, cfgRotateProp, cfgScaleProp;
+static float cfgTranslateDev, cfgRotateDev, cfgScaleDev;
+static float cfgOriginDev;
+
+static struct config_var cfgvars[] = {
+    { "threads",        config_var::INT,       &cfgThreads },
+    /* poi detection */
+    { "poiSteps",       config_var::INT,       &cfgPOISteps },
+    { "poiScales",      config_var::CALLBACK,  (void *)&parsePOIScales },
+    { "poiCount",       config_var::INT,       &cfgPOICount },
+    { "poiThreshold",   config_var::FLOAT,     &cfgPOIThreshold },
+    /* evolution */
+    { "populationSize", config_var::INT,       &cfgPopulationSize },
+    { "survivalRate",   config_var::FLOAT,     &cfgSurvivalRate },
+    /* initial population generation parameters */
+    { "translateInit",  config_var::FLOAT,     &cfgTranslateInit },
+    { "rotateInit",     config_var::FLOAT,     &cfgRotateInit },
+    { "scaleInit",      config_var::FLOAT,     &cfgScaleInit },
+    /* mutation propabilities and standard deviations (gaussian distribution) */
+    { "translateProp",  config_var::FLOAT,     &cfgTranslateProp },
+    { "rotateProp",     config_var::FLOAT,     &cfgRotateProp },
+    { "scaleProp",      config_var::FLOAT,     &cfgScaleProp },
+    { "translateDev",   config_var::FLOAT,     &cfgTranslateDev },
+    { "rotateDev",      config_var::FLOAT,     &cfgRotateDev },
+    { "scaleDev",       config_var::FLOAT,     &cfgScaleDev },
+    /* standard deviation of rotation origin from the median point */
+    { "originDev",      config_var::FLOAT,     &cfgOriginDev },
+    /* end-of-table terminator, must be here! */
+    { NULL,             config_var::NONE,      NULL }
+};
+
+static void parsePOIScales(const char *value)
+{
+    while(*value)
+    {
+        char *end;
+        float v = strtof(value, &end);
+        if(end == value)
+            throw std::runtime_error("failed to parse scales");
+        
+        cfgPOIScales.push_back(v);
+
+        while(isspace(*end)) end++;
+        if(*end == ',') end++;
+        while(isspace(*end)) end++;
+
+        value = end;
+    }
 }
-inline float randomSign() { return (rand()&1)? -1.0f : 1.0f; }
-inline float randomSigned(float maxv = 1.0f) { return randomFloat(maxv)*randomSign(); }
+
+/* ------------------------------------------------------------------------ */
 
 class Matrix33
 {
@@ -34,10 +96,7 @@ public:
     inline static Matrix33 rotation(float alpha);
     inline static Matrix33 scaling(float sx, float sy);
     
-    inline static Matrix33 Rtranslation(float maxvx, float maxvy) { return translation(randomSigned(maxvx), randomSigned(maxvy)); }
-    inline static Matrix33 Rrotation(float maxv) { return rotation(randomSigned(maxv)); }
-    inline static Matrix33 Rscaling(float maxsx, float maxsy);
-    
+    /* multiply by vector and matrix */
     inline POI operator*(const POI &p) const;
     inline Matrix33 operator*(const Matrix33 &M) const;
 };
@@ -45,7 +104,8 @@ public:
 Matrix33::Matrix33()
 {
     Matrix33 &me = *this;
-    me[0][0] = me[0][1] = me[0][2] = me[1][0] = me[1][1] = me[1][2] = me[2][0] = me[2][1] = me[2][2] = 0.0f;
+    me[0][0] = me[1][1] = me[2][2] = 1;
+    me[0][1] = me[0][2] = me[1][0] = me[1][2] = me[2][0] = me[2][1] = 0;
 }
 
 Matrix33::~Matrix33()
@@ -76,14 +136,6 @@ Matrix33 Matrix33::scaling(float sx, float sy)
     return ret;
 }
 
-Matrix33 Matrix33::Rscaling(float maxsx, float maxsy)
-{
-    Matrix33 ret;
-    ret[0][0] = exp(randomSigned(maxsx)); ret[1][1] = exp(randomSigned(maxsy));
-    ret[2][2] = 1.0f;
-    return ret;
-}
-
 POI Matrix33::operator*(const POI &p) const
 {
     const Matrix33 &me = *this;
@@ -104,199 +156,310 @@ Matrix33 Matrix33::operator*(const Matrix33 &M) const
 
 /* ------------------------------------------------------------------------ */
 
-
-/* instance of the image, that is an image (is it really necessary?) itself 
- * with a lot of additional things we managed to compute (POIs, mostly) */
-class ImageInstance 
+class Random
 {
 public:
-    const Image *rawImg;
-    std::vector<POI> poiVec;
-    /* jakieś jeszcze rzeczy, typu mapka kolorów */
-      
-    inline ImageInstance(const ImageInstance &inst) {
-        rawImg = inst.rawImg; //wskaznik ten sam, bo i obrazek ten sam
-        poiVec = inst.poiVec;
+    static inline bool coin() {
+        return rand()&1;
     }
-        
-    inline ImageInstance(const Image& img, bool evaluate) {
-        rawImg = &img;
-        std::vector<float> scales(3,0); scales[0] = 1; scales[1] = 4; scales[2] = 7;
-        if (evaluate) poiVec = findPOIs(evaluateImage(img,20,scales), 7, 40.0, 50); // parametry dobrane heurystycznie
+    static inline bool maybe(float prop) {
+        return rand() <= prop*RAND_MAX;
     }
-    
-    float distance(const ImageInstance& inst);
-    
-    inline void toImage(Image* dst) { renderPOIs(poiVec, dst, 1, 100000); }
+    static inline float positive(float max) {
+        return max*((float)rand() / RAND_MAX);
+    }
+    static inline float real(float max) {
+        return coin() ? positive(max) : -positive(max);
+    }
+    static inline float gaussian(float mean, float deviation) {
+        /* Box-Muller transform ftw ;) */
+        float p = positive(1), q = positive(1);
+        float g = sqrtf(-2.0f * logf(p)) * cosf(2.0f*M_PI*q);
+        return g*deviation + mean;
+    }
 };
 
-float ImageInstance::distance(const ImageInstance& inst)
+/* ------------------------------------------------------------------------ */
+
+static Image renderTransformedPOIs(const std::vector<POI> &pois, const Matrix33 &M, int w, int h)
 {
-    /* dla każdego punktu wektora jednego obrazka szukamy najbliższego mu w drugim wektorze */
-    /* na razie metryka: suma odległości */
-    float sum = 0.0f;
-    for (int i=0; i<(int)poiVec.size(); i++)
-    {
-        float mindist = 100000.0f;
-        for (int j=0; j<(int)inst.poiVec.size(); j++)
-            mindist = std::min(mindist, dist(poiVec[i], inst.poiVec[j]));
-        sum += mindist;
+    std::vector<POI> mypois(pois.size());
+    for(int i=0; i<(int)pois.size(); i++)
+        mypois[i] = M*pois[i];
+    return renderPOIs(mypois, w,h);
+}
+
+/* ------------------------------------------------------------------------ */
+class Data
+{
+    inline void findOrigin();
+
+public:
+    const Image *raw;
+    std::vector<POI> pois;
+    int originX, originY; /* median of POIs */
+    /* + more to come (handle for opengl images compositing) */
+
+    Data(const Image *raw);
+    inline float closestPOI(float x, float y) const;
+    inline float closestPOI(const POI &p) const;
+};
+
+Data::Data(const Image *raw)
+{
+    this->raw = raw;
+    Array2D<float> eval = evaluateImage(*raw, cfgPOISteps, cfgPOIScales);
+    pois = findPOIs(eval, cfgPOIThreshold, cfgPOICount);
+    findOrigin();
+}
+
+void Data::findOrigin()
+{
+    std::vector<int> v;
+    
+    for(int i=0; i<(int)pois.size(); i++)
+        v.push_back(pois[i].x);
+    std::sort(v.begin(), v.end());
+    originX = v[pois.size()/2];
+
+    v.clear();
+    for(int i=0; i<(int)pois.size(); i++)
+        v.push_back(pois[i].y);
+    std::sort(v.begin(), v.end());
+    originY = v[pois.size()/2];
+}
+
+float Data::closestPOI(float x, float y) const
+{
+    float best = 1e+30;
+    for(int i=0; i<(int)pois.size(); i++)
+        best = std::min(best, sqrtf( (x-pois[i].x)*(x-pois[i].x) +
+                                     (y-pois[i].y)*(y-pois[i].y) ));
+    return best;
+}
+
+float Data::closestPOI(const POI &p) const {
+    return closestPOI(p.x, p.y);
+}
+    
+/* ------------------------------------------------------------------------ */
+
+class Agent
+{
+public:
+    Matrix33 M; /* the transformation matrix */
+    float distance; /* point cloud distance */ 
+    float fitness; /* population-wide fitness factor */
+
+    /* agents ordering */
+    inline bool operator<(const Agent &A) const {
+        return fitness > A.fitness;
     }
-    return sum;
+    
+    /* transformation matrix decomposition */
+    inline float dx() const { return M[0][2]; }
+    inline float dy() const { return M[1][2]; }
+    inline float sx() const { return sqrtf(M[0][0]*M[0][0]+M[0][1]*M[0][1]); }
+    inline float sy() const { return sqrtf(M[1][0]*M[1][0]+M[1][1]*M[1][1]); }
+    inline float alfa() const { float s = sx(); return atan2f(M[0][1]/s, M[0][0]/s); }
+
+    inline void translate(float dx, float dy);
+    inline void rotate(float angle, float ox, float oy);
+    inline void scale(float sx, float sy, float ox, float oy);    
+};
+
+/* the three basic mutations.
+ *
+ * the (ox,oy) is transformation origin specified in image local
+ * coordinates. transformation will take place relative to the
+ * current location of this given point (that is, at M*(ox,oy)).
+ *
+ * matricies are PRE-multiplied, because transforms work like
+ *    y = ... M3 * M2 * M1 * x
+ * and we want newly applied transformation to come last. */
+void Agent::translate(float dx, float dy) {
+    M = Matrix33::translation(dx,dy)
+      * M;
+}
+void Agent::rotate(float angle, float ox, float oy) {
+    POI origin = M * POI(ox,oy,0);
+    M = Matrix33::translation(origin.x,origin.y)
+      * Matrix33::rotation(angle)
+      * Matrix33::translation(-origin.x,-origin.y)
+      * M;
+}
+void Agent::scale(float sx, float sy, float ox, float oy) {
+    debug("scale(%f,%f)\n",sx,sy);
+    POI origin = M * POI(ox,oy,0);
+    M = Matrix33::translation(origin.x,origin.y)
+      * Matrix33::scaling(sx, sy)
+      * Matrix33::translation(-origin.x,-origin.y)
+      * M;
 }
 
 /* ------------------------------------------------------------------------ */
 
-class Individual 
+class Population
 {
-public:
-    float aimf;
+    /* we're trying to match the Known image to the Alien image */
+    const Data *known, *alien;
 
-    inline Individual() : aimf(-1.0f) { }
-    virtual Matrix33 toMatrix() const = 0;
-    
-    inline bool operator<(const Individual& I) const { return aimf < I.aimf; }
-};
-
-class Agent : public Individual
-{public:
-    Matrix33 M;
-    float W, H; 
-    float dist;
-    /* musimy znac wymiary obrazka zeby wiedziec jakie jest sensowne przesuniecie
-     * to sa wymiary obrazka DOCELOWEGO, a nie przetwarzanego !! */
-    
-    inline float dx() { return M[0][2]; }
-    inline float dy() { return M[1][2]; }
-    inline float scx() { return sqrtf(M[0][0]*M[0][0]+M[0][1]*M[0][1]); }
-    inline float scy() { return sqrtf(M[1][0]*M[1][0]+M[1][1]*M[1][1]); }
-    inline float alfa() { float sx = scx(); return atan2(M[0][1]/sx, M[0][0]/sx); }
-        
-    inline Agent(int w, int h, bool random = true); //random init
-    Matrix33 toMatrix() const { return M; }
-
-    std::vector<POI> applyToPOIs(const std::vector<POI> &v);
-    ImageInstance apply(const ImageInstance& inst);
-};
-
-Agent::Agent(int w, int h, bool random) : Individual()
-{
-    W = w; H = h;
-    if (random) {
-        M[0][2] = randomFloat(W);
-        M[1][2] = randomFloat(H);
-        float scx = randomSigned(5.0f),
-              scy = randomSigned(5.0f),
-              alfa = randomFloat(2.0f*(float)M_PI);
-        M[0][0] = cosf(alfa)*scx;
-        M[0][1] = sinf(alfa)*scx;
-        M[1][0] = -sinf(alfa)*scy;
-        M[1][1] = cosf(alfa)*scy;
-        M[2][2] = 1.0f;
-    }
-    else {
-        M[0][0] = M[1][1] = M[2][2] = 1.0f;
-    }
-}
-
-std::vector<POI> Agent::applyToPOIs(const std::vector<POI> &v)
-{
-    std::vector<POI> ret(v.size());
-    for (int i=0; i<(int)v.size(); i++) 
-        ret[i] = M*v[i];
-    return ret;
-}
-
-ImageInstance Agent::apply(const ImageInstance& inst)
-{
-    ImageInstance ret(*inst.rawImg, false);
-    ret.poiVec = applyToPOIs(inst.poiVec);
-    return ret;
-}
-
-/* ------------------------------------------------------------------------ */
-
-class Evolution /* main class */
-{
-    int N;
-    float W, H; //niestety, chyba muszę pamiętać te wartości. Rozmiary obrazka docelowego
-    const Image *orig, *maybe;
-    ImageInstance *origInst, *maybeInst;
+    /* our lovely little things */
     std::vector<Agent> pop;
+
+    /* population evaluation (multi-threaded) */
+    class EvaluationJob : public AsyncJob
+    {
+    public:
+        Population *uplink;
+        int from, to;
+        virtual ~EvaluationJob();
+        virtual void run();
+    };
+    void evaluate();
+
+    /* roulette selection */
+    int roulette(int n);
+
+    /* mutations and matings */
+    void makeRandom(Agent *a);
+    void mutation(Agent *a);
+
 public:
-    Evolution(Image* imorig, Image* immay, int n);
-    inline static float takerandom(float a, float b) { return (randomSign()>0.0 ? a : b); }
-    inline void randomInit() { for (int i=0; i<N; i++) pop.push_back(Agent(W, H, true)); }
-    inline static void mutate(float &value, float dv, float prob) { 
-        value += (randomFloat()<prob? randomFloat()*dv*2.0-dv : 0); 
-    }
-    inline void mutate(Agent& A, float prob, float change)
-    {
-        const float dsc = 0.01f*change;
-        const float dmove = 1.0f*change;
-        const float dalfa = 0.05f*change;
-        int which = rand()%3;
-        switch (which) {
-            case 0: A.M = A.M*Matrix33::Rtranslation(dmove*W, dmove*H); break;
-            case 1: A.M = A.M*Matrix33::Rscaling(dsc, dsc); break;
-            case 2: A.M = A.M*Matrix33::Rrotation(dalfa); break;
-        }
-    }
-    
-    inline float evaluateDist(Agent& A) { return A.dist = origInst->distance(A.apply(*maybeInst)); }
-    inline void evaluateAll() { 
-        float dmax = 0.0f;
-        for (int i=0; i<N; i++) dmax = std::max(dmax, evaluateDist(pop[i])); 
-        float sumd = 0.0f;
-        for (int i=0; i<N; i++) sumd += dmax-pop[i].dist;
-        for (int i=0; i<N; i++) pop[i].aimf = (dmax-pop[i].dist)/sumd;
-    }
-    Agent mainLoop(int maxiter = 1000, DisplaySlot *bestDS = NULL, DisplaySlot *origDS = NULL, DisplaySlot *maybeDS = NULL)
-    {
-        float change = 5.0f;
-        randomInit();
-        
-        Image origPOIimg(W, H);
-        Image maybePOIimg(maybe->getWidth(), maybe->getHeight());
-        Image tmpImg(W, H);
-        
-        origInst->toImage(&origPOIimg);
-        maybeInst->toImage(&maybePOIimg);
-        
-        if (origDS != NULL) origDS->update(origPOIimg);
-        if (maybeDS != NULL) maybeDS->update(maybePOIimg);
-        
-        for (int it=0; it<maxiter; it++)
-        {
-            for (int i=0; i<N/3; i++)
-                pop[N-i-1] = pop[i];
-            
-            for (int i=0; i<N; i++) mutate(pop[i], 0.5, change);
-            
-            evaluateAll();
-            std::sort(pop.rbegin(), pop.rend());
-            if (bestDS != NULL) {
-                pop[0].apply(*maybeInst).toImage(&tmpImg);
-                bestDS->update(tmpImg);
-                bestDS->recaption("distance = %.1f, aim function = %.1f. angle=%.2f, dx=%.1f, dy=%.1f, scx=%.1f, scy=%.1f", 
-                               pop[0].dist, pop[0].alfa(), pop[0].dx(), pop[0].dy(), pop[0].scx(), pop[0].scy());
-            }
-            
-            // change = origInst->poiVec.size()*(W+H)*0.001f;
-            change *= 0.993f;
-        }
-        return pop[0];
-    }
+    Population(const Data *known, const Data *alien);
+    void evolve();
 };
 
-Evolution::Evolution(Image* imorig, Image* immay, int n) 
+/* --- population evaluation */
+Population::EvaluationJob::~EvaluationJob() {
+    /* empty */
+}
+void Population::EvaluationJob::run()
 {
-    N = n;
-    orig = imorig; 
-    maybe = immay;
-    W = orig->getWidth(); H = orig->getHeight();
-    origInst = new ImageInstance(*orig, true);
-    maybeInst = new ImageInstance(*maybe, true);
+    for(int i=from; i<to; i++)
+    {
+        Agent &a = uplink->pop[i];
+        a.distance = 0;
+        for (int j=0; j<(int)uplink->known->pois.size(); j++)
+            a.distance += uplink->alien->closestPOI(a.M * uplink->known->pois[j]);
+        a.distance = -a.distance;
+    }
+}
+void Population::evaluate()
+{
+    const int jobSlice = 100;
+    int nJobs = (pop.size() + jobSlice - 1) / jobSlice;
+    EvaluationJob jobs[nJobs];
+    Completion c;
+    
+    for(int i=0; i<nJobs; i++) {
+        jobs[i].completion = &c;
+        jobs[i].from = jobSlice*i;
+        jobs[i].to = std::min(jobSlice*(i+1), (int)pop.size());
+        jobs[i].uplink = this;
+        aq->queue(&jobs[i]);
+    }
+
+    c.wait();
+
+    float minDistance = 1e+30;
+    for(int i=0; i<(int)pop.size(); i++)
+        minDistance = std::min(minDistance, pop[i].distance);
+    float denominator = 0;
+    for(int i=0; i<(int)pop.size(); i++)
+        denominator += pop[i].distance - minDistance;
+    assert(denominator > 1e-5);
+    for(int i=0; i<(int)pop.size(); i++)
+        pop[i].fitness = (pop[i].distance - minDistance) / denominator;
+
+    std::sort(pop.begin(), pop.end());
+}
+
+/* --- roulette selection */
+int Population::roulette(int n)
+{
+    float x = 0;
+    for(int i=0; i<n; i++)
+        x += pop[i].fitness;
+
+    float y = Random::positive(x);
+    for(int i=0; i<n; i++)
+        if(y <= pop[i].fitness)
+            return i;
+        else
+            y -= pop[i].fitness;
+
+    fprintf(stderr, "WARNING: roulette selection failed, residual %e", y);
+    return 0;
+}
+
+/* --- mutations */
+void Population::makeRandom(Agent *a)
+{
+    a->M = Matrix33();
+    a->translate(
+            Random::real(cfgTranslateInit) * known->raw->getWidth(),
+            Random::real(cfgTranslateInit) * known->raw->getHeight());
+    a->rotate(Random::real(cfgRotateInit),
+            known->originX, known->originY);
+    a->scale(1.f+Random::real(cfgScaleInit),1.f+Random::real(cfgScaleInit),
+            known->originX, known->originY);
+}
+void Population::mutation(Agent *a)
+{
+    float w = known->raw->getWidth(),
+          h = known->raw->getHeight();
+
+    if(Random::maybe(cfgTranslateProp))
+        a->translate(Random::gaussian(0, cfgTranslateDev) * w,
+                     Random::gaussian(0, cfgTranslateDev) * h);
+
+    if(Random::maybe(cfgRotateProp))
+        a->rotate(Random::gaussian(0, cfgRotateDev),
+                  Random::gaussian(known->originX, cfgOriginDev * w),
+                  Random::gaussian(known->originY, cfgOriginDev * h));
+
+    if(Random::maybe(cfgScaleProp))
+        a->scale(Random::gaussian(1, cfgScaleDev),
+                 Random::gaussian(1, cfgScaleDev),
+                 Random::gaussian(known->originX, cfgOriginDev * w),
+                 Random::gaussian(known->originY, cfgOriginDev * h));
+}
+
+/* --- the so called main loop */
+void Population::evolve()
+{
+    pop.resize(cfgPopulationSize);
+    for(int i=0; i<(int)pop.size(); i++)
+        makeRandom(&pop[i]);
+
+    DisplaySlot best("best fit");
+
+    for(;;)
+    {
+        debug("step\n");
+        evaluate();
+
+        best.recaption("best fit: distance %f, fitness %f, dx=%f, dy=%f, sx=%f, sy=%f, a=%f",
+                       pop[0].distance, pop[0].fitness,
+                       pop[0].dx(),pop[0].dy(),pop[0].sx(),pop[0].sy(),pop[0].alfa());
+
+        best.update(renderTransformedPOIs(
+            known->pois, pop[0].M, known->raw->getWidth(), known->raw->getHeight()));
+
+        int survivors = cfgSurvivalRate * pop.size();
+        for(int i=survivors; i<(int)pop.size(); i++)
+            pop[i] = pop[roulette(survivors)];
+
+        for(int i=0; i<(int)pop.size(); i++)
+            mutation(&pop[i]);
+    }
+}
+
+Population::Population(const Data *known, const Data *alien)
+{
+    this->known = known;
+    this->alien = alien;
 }
 
 /* ------------------------------------------------------------------------ */
@@ -304,39 +467,31 @@ Evolution::Evolution(Image* imorig, Image* immay, int n)
 int main(int argc, char *argv[])
 {
     srand(time(0));
-    if (argc < 3/*4*/) {
-        fprintf(stderr, "usage: [input: original] [input: pretending]\n");// [output: match\n");
+    parse_config("evolution.cfg", cfgvars);
+    spawn_worker_threads(cfgThreads); /* should detect no. of cpus available */
+    gui_gtk_init(&argc, &argv); /* always before looking argc, argv */
+
+    if (argc != 3) {
+        fprintf(stderr, "usage: [input: known] [input: alien]\n");
         return 1;
     }
-    /* będziemy zmieniac obrazek "pretending" tak, aby otrzymać original */
-    gui_gtk_init(&argc, &argv);
-    spawn_worker_threads(2);
     
-    Image origImg = Image::readPGM(argv[1]);
-    Image pretendImg = Image::readPGM(argv[2]);
-    
-    int H = origImg.getHeight(), W = origImg.getWidth();
-    Image tmpImg(W, H);
-    Image bestImg(W, H);
-    
-    DisplaySlot origDS, maybeDS, bestmatchDS;
-    origDS.rename("original image");
-    origDS.recaption("");
-    maybeDS.rename("tested image");
-    maybeDS.recaption("");
-    bestmatchDS.rename("best match between images");
-    bestmatchDS.recaption("");
-    origDS.update(origImg);
-    maybeDS.update(pretendImg);
-    
-    debug("okay, start evolving\n");
-    
-    Evolution EVO(&origImg, &pretendImg, 2000);
-    EVO.mainLoop(1000000, &bestmatchDS, &origDS, &maybeDS);
+    Image knownImg = Image::readPGM(argv[1]),
+          alienImg = Image::readPGM(argv[2]);
+
+    Data knownDat(&knownImg),
+         alienDat(&alienImg);
+
+    DisplaySlot knownImgDS("known image"), alienImgDS("alien image"),
+                knownPOIsDS("known POIs"), alienPOIsDS("alien POIs");
+
+    knownImgDS.update(knownImg);
+    alienImgDS.update(alienImg);
+    knownPOIsDS.update(renderPOIs(knownDat.pois, knownImg.getWidth(), knownImg.getHeight()));
+    alienPOIsDS.update(renderPOIs(alienDat.pois, alienImg.getWidth(), alienImg.getHeight()));
+
+    Population(&knownDat, &alienDat).evolve();
     
     return 0;
 }
-        
-
-
 

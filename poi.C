@@ -212,7 +212,7 @@ Image reduceEvaluationToImage(const Array2D<float> &eval)
     return ret;
 }
 
-std::vector<POI> findPOIs(const Array2D<float> &eval, int border, float threshold, int count)
+std::vector<POI> findPOIs(const Array2D<float> &eval, float threshold, int count)
 {
     const float R0 = 20.0;
 
@@ -222,8 +222,8 @@ std::vector<POI> findPOIs(const Array2D<float> &eval, int border, float threshol
     tabu.fill(0);
 
     std::vector<POI> all;
-    for(int y=border; y<h-border; y++)
-        for(int x=border; x<w-border; x++)
+    for(int y=0; y<h; y++)
+        for(int x=0; x<w; x++)
             all.push_back(POI(x,y,eval[y][x]));
 
     std::sort(all.begin(), all.end());
@@ -251,11 +251,18 @@ std::vector<POI> findPOIs(const Array2D<float> &eval, int border, float threshol
     return pois;
 }
     
-void renderPOIs(const std::vector<POI> &pois, Image *dst, float threshold, int count)
+void overlayPOIs(const std::vector<POI> &pois, Image *dst)
 {
-    dst->fill(1);
-    for (int i=0; i<(int)pois.size() && i<count && pois[i].val >= threshold; i++)
+    for (int i=0; i<(int)pois.size(); i++)
         dst->drawRect(pois[i].x-1, pois[i].x+1, pois[i].y-1, pois[i].y+1, 255);
+}
+
+Image renderPOIs(const std::vector<POI> &pois, int w, int h)
+{
+    Image ret(w,h);
+    ret.fill(1);
+    overlayPOIs(pois,&ret);
+    return ret;
 }
 
 /* ------------------------------------------------------------------------ */
