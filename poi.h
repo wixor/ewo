@@ -1,6 +1,7 @@
 #ifndef __POI_H__
 #define __POI_H__
 
+#include <cmath>
 #include <vector>
 #include "image.h"
 
@@ -14,6 +15,10 @@ struct POI {
         return val != p.val ? val > p.val :
                  x != p.x   ? x   < p.x :
                               y   < p.y;
+    }
+
+    static inline float dist(const POI &a, const POI &b) {
+        return sqrtf((a.x-b.x)*(a.x-b.x) + (a.y-b.y)*(a.y-b.y));
     }
 };
 

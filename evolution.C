@@ -182,15 +182,6 @@ public:
 
 /* ------------------------------------------------------------------------ */
 
-static Image renderTransformedPOIs(const std::vector<POI> &pois, const Matrix33 &M, int w, int h)
-{
-    std::vector<POI> mypois(pois.size());
-    for(int i=0; i<(int)pois.size(); i++)
-        mypois[i] = M*pois[i];
-    return renderPOIs(mypois, w,h);
-}
-
-/* ------------------------------------------------------------------------ */
 class Data
 {
     inline void findOrigin();
@@ -219,8 +210,7 @@ public:
 
     static Data build(const char *filename);
 
-    inline float closestPOI(float x, float y) const;
-    inline float closestPOI(const POI &p) const;
+    std::vector<POI> transformPOIs(const Matrix33 &M) const;
 };
 
 Data Data::build(const char *filename)
@@ -348,19 +338,14 @@ void Data::writeCache(const char *filename) const
     fclose(f);
 }
 
-float Data::closestPOI(float x, float y) const
+std::vector<POI> Data::transformPOIs(const Matrix33 &M) const
 {
-    float best = 1e+30;
+    std::vector<POI> xfmd(pois.size());
     for(int i=0; i<(int)pois.size(); i++)
-        best = std::min(best, sqrtf( (x-pois[i].x)*(x-pois[i].x) +
-                                     (y-pois[i].y)*(y-pois[i].y) ));
-    return best;
+        xfmd[i] = M * pois[i];
+    return xfmd;
 }
 
-float Data::closestPOI(const POI &p) const {
-    return closestPOI(p.x, p.y);
-}
-    
 /* ------------------------------------------------------------------------ */
 
 class Agent
@@ -452,15 +437,29 @@ public:
 Population::EvaluationJob::~EvaluationJob() {
     /* empty */
 }
+static float matchPOIs(const std::vector<POI> &a, const std::vector<POI> &b)
+{
+    float sum = 0;
+    for(int i=0; i<(int)a.size(); i++)
+    {
+        float best = 1e+30;
+        for(int j=0; j<(int)b.size(); j++)
+            best = std::min(best, POI::dist(a[i], b[j]));
+        sum += best;
+    }
+    return sum;
+}
 void Population::EvaluationJob::run()
 {
+    const Data *known = uplink->known,
+               *alien = uplink->alien;
+
     for(int i=from; i<to; i++)
     {
-        Agent &a = uplink->pop[i];
-        a.distance = 0;
-        for (int j=0; j<(int)uplink->known->pois.size(); j++)
-            a.distance += uplink->alien->closestPOI(a.M * uplink->known->pois[j]);
-        a.distance = -a.distance;
+        Agent *a = &uplink->pop[i];
+        std::vector<POI> xformed = known->transformPOIs(a->M);
+        a->distance = -matchPOIs(xformed, alien->pois)
+                      -matchPOIs(alien->pois, xformed);
     }
 }
 void Population::evaluate()
@@ -558,12 +557,12 @@ void Population::evolve()
     {
         evaluate();
 
+        best.update(renderPOIs(known->transformPOIs(pop[0].M),
+                               alien->raw->getWidth(), alien->raw->getHeight()));
         best.recaption("best fit: dist %.2f, fitness %f\nd=(%.0f,%.0f), s=(%.2f,%.2f), a=%.3f",
                        pop[0].distance, pop[0].fitness,
                        pop[0].dx(),pop[0].dy(),pop[0].sx(),pop[0].sy(),pop[0].alfa()/M_PI*180.0);
 
-        best.update(renderTransformedPOIs(
-            known->pois, pop[0].M, alien->raw->getWidth(), alien->raw->getHeight()));
 
         int survivors = cfgSurvivalRate * pop.size();
         for(int i=survivors; i<(int)pop.size(); i++)
