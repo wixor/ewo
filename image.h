@@ -65,6 +65,8 @@ public:
 
     inline void fill(uint8_t with) { memset(data, with, width*height); }
     void drawRect(int x0, int x1, int y0, int y1, uint8_t val);
+
+    uint32_t checksum() const;
 };
 
 #endif

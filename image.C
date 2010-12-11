@@ -58,3 +58,32 @@ void Image::drawRect(int x0, int x1, int y0, int y1, uint8_t val)
             if(inside(x,y))
                 (*this)[y][x] = val;
 }
+
+uint32_t Image::checksum() const
+{
+    uint32_t sum1 = 0xffff, sum2 = 0xffff;
+
+    int len = width*height/2;
+    const uint16_t *ptr = (const uint16_t *)data;
+
+    while (len) {
+        int block = std::min(360, len);
+        len -= block;
+        while(block--) 
+            sum1 += *ptr++,
+            sum2 += sum1;
+        sum1 = (sum1 & 0xffff) + (sum1 >> 16);
+        sum2 = (sum2 & 0xffff) + (sum2 >> 16);
+    }
+    
+    if(width*height%2 == 1)
+        sum1 += data[width*height-1], sum2 += sum1;
+    
+    sum1 = (sum1 & 0xffff) + (sum1 >> 16);
+    sum2 = (sum2 & 0xffff) + (sum2 >> 16);
+    sum1 = (sum1 & 0xffff) + (sum1 >> 16);
+    sum2 = (sum2 & 0xffff) + (sum2 >> 16);
+    
+    return sum2 << 16 | sum1;
+}
+

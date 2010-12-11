@@ -4,6 +4,7 @@
 #include <ctype.h>
 #include <unistd.h>
 #include <vector>
+#include <string>
 #include <algorithm>
 #include <stdexcept>
 
@@ -193,24 +194,54 @@ static Image renderTransformedPOIs(const std::vector<POI> &pois, const Matrix33 
 class Data
 {
     inline void findOrigin();
+    inline void findPOIs();
+
+    static inline std::string makeCacheFilename(const std::string &filename);
+    inline uint32_t checksum() const;
+    inline bool readCached(const char *filename);
+    inline void writeCache(const char *filename) const;
+
+    struct cacheHdr {
+        enum { MAGIC = 0xfc83dea1 };
+        uint32_t magic;
+        uint32_t checksum;
+        uint32_t poiCount;
+        uint32_t originX, originY;
+    };
+
+    inline Data() { }
 
 public:
-    const Image *raw;
+    Image *raw;
     std::vector<POI> pois;
     int originX, originY; /* median of POIs */
     /* + more to come (handle for opengl images compositing) */
 
-    Data(const Image *raw);
+    static Data build(const char *filename);
+
     inline float closestPOI(float x, float y) const;
     inline float closestPOI(const POI &p) const;
 };
 
-Data::Data(const Image *raw)
+Data Data::build(const char *filename)
 {
-    this->raw = raw;
-    Array2D<float> eval = evaluateImage(*raw, cfgPOISteps, cfgPOIScales);
-    pois = findPOIs(eval, cfgPOIThreshold, cfgPOICount);
-    findOrigin();
+    Data ret;
+    ret.raw = new Image(0,0);
+    (*ret.raw) = Image::readPGM(filename);
+
+    if(!ret.readCached(filename)) {
+        ret.findPOIs();
+        ret.findOrigin();
+        ret.writeCache(filename);
+    }
+
+    return ret;
+}
+
+void Data::findPOIs()
+{
+    Array2D<float> eval = ::evaluateImage(*raw, cfgPOISteps, cfgPOIScales);
+    pois = ::findPOIs(eval, cfgPOIThreshold, cfgPOICount);
 }
 
 void Data::findOrigin()
@@ -227,6 +258,94 @@ void Data::findOrigin()
         v.push_back(pois[i].y);
     std::sort(v.begin(), v.end());
     originY = v[pois.size()/2];
+}
+
+std::string Data::makeCacheFilename(const std::string &filename)
+{
+    if(filename.size() < 4 || filename.compare(filename.size()-4, 4, ".pgm") != 0) {
+        fprintf(stderr, "WARNING: unknown image file extension\n");
+        return NULL;
+    }
+
+    std::string ret = filename;
+    ret[ret.size()-3] = 'd'; ret[ret.size()-2] = 'a'; ret[ret.size()-1] = 't';
+    return ret;
+}
+
+static inline uint32_t float2u32(float v) {
+    union { float x; uint32_t y; } aa;
+    aa.x = v;
+    return aa.y;
+}
+uint32_t Data::checksum() const
+{
+    uint32_t ret = raw->checksum();
+    ret ^= cfgPOISteps ^ cfgPOICount;
+    ret ^= float2u32(cfgPOIThreshold);
+    for(int i=0; i<(int)cfgPOIScales.size(); i++)
+        ret ^= float2u32(cfgPOIScales[i]);
+    return ret;
+}
+
+bool Data::readCached(const char *filename)
+{
+    FILE *f = fopen(makeCacheFilename(std::string(filename)).c_str(), "rb");
+    if(!f) {
+        fprintf(stderr, "failed to open cache file\n");
+        return false;
+    }
+
+    struct cacheHdr hdr;
+    if(fread(&hdr, sizeof(hdr),1, f) != 1) {
+        fprintf(stderr, "WARNING: corrupted cache file header\n");
+        fclose(f); return false;
+    }
+
+    if(hdr.magic != cacheHdr::MAGIC) {
+        fprintf(stderr, "WARNING: invalid cache file magic (found %08x, expected %08x)\n", hdr.magic, cacheHdr::MAGIC);
+        fclose(f); return false;
+    }
+
+    if(hdr.checksum != checksum()) {
+        fprintf(stderr, "cache doesn't match image, propably stale cache file\n");
+        fclose(f); return false;
+    }
+
+    pois.resize(hdr.poiCount);
+    if(fread(&pois[0], sizeof(POI),hdr.poiCount, f) != hdr.poiCount) {
+        fprintf(stderr, "WARNING: failed to read POIs from cache\n");
+        pois.clear(); fclose(f); return false;
+    }
+
+    originX = hdr.originX;
+    originY = hdr.originY;
+
+    fclose(f);
+
+    fprintf(stderr, "cache read successfully\n");
+    return true;
+}
+
+void Data::writeCache(const char *filename) const
+{
+    FILE *f = fopen(makeCacheFilename(std::string(filename)).c_str(), "wb");
+    if(!f) throw std::runtime_error("failed to write cache file");
+
+    cacheHdr hdr;
+    hdr.magic = cacheHdr::MAGIC;
+    hdr.checksum = checksum();
+    hdr.poiCount = pois.size();
+    hdr.originX = originX;
+    hdr.originY = originY;
+
+    if(fwrite(&hdr, sizeof(hdr),1, f) != 1 ||
+       fwrite(&pois[0], sizeof(POI),pois.size(), f) != pois.size()) {
+        fclose(f);
+        throw std::runtime_error("failed to write cache file");
+    }
+
+    fprintf(stderr, "cache written successfully\n");
+    fclose(f);
 }
 
 float Data::closestPOI(float x, float y) const
@@ -478,14 +597,14 @@ int main(int argc, char *argv[])
     Image knownImg = Image::readPGM(argv[1]),
           alienImg = Image::readPGM(argv[2]);
 
-    Data knownDat(&knownImg),
-         alienDat(&alienImg);
+    Data knownDat = Data::build(argv[1]),
+         alienDat = Data::build(argv[2]);
 
     DisplaySlot knownImgDS("known image"), alienImgDS("alien image"),
                 knownPOIsDS("known POIs"), alienPOIsDS("alien POIs");
 
-    knownImgDS.update(knownImg);
-    alienImgDS.update(alienImg);
+    knownImgDS.update(*knownDat.raw);
+    alienImgDS.update(*alienDat.raw);
     knownPOIsDS.update(renderPOIs(knownDat.pois, knownImg.getWidth(), knownImg.getHeight()));
     alienPOIsDS.update(renderPOIs(alienDat.pois, alienImg.getWidth(), alienImg.getHeight()));
 
