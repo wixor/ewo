@@ -30,9 +30,10 @@ static int cfgPOICount;
 static int cfgPopulationSize;
 static float cfgSurvivalRate;
 static float cfgTranslateInit, cfgRotateInit, cfgScaleInit;
-static float cfgTranslateProp, cfgRotateProp, cfgScaleProp;
+static float cfgTranslateProp, cfgRotateProp, cfgScaleProp, cfgFlipProp;
 static float cfgTranslateDev, cfgRotateDev, cfgScaleDev;
 static float cfgOriginDev;
+static float cfgDEMatingProp, cfgDEMatingCoeff, cfgDEMatingDev;
 
 static struct config_var cfgvars[] = {
     { "threads",        config_var::INT,       &cfgThreads },
@@ -52,11 +53,16 @@ static struct config_var cfgvars[] = {
     { "translateProp",  config_var::FLOAT,     &cfgTranslateProp },
     { "rotateProp",     config_var::FLOAT,     &cfgRotateProp },
     { "scaleProp",      config_var::FLOAT,     &cfgScaleProp },
+    { "flipProp",       config_var::FLOAT,     &cfgFlipProp },
     { "translateDev",   config_var::FLOAT,     &cfgTranslateDev },
     { "rotateDev",      config_var::FLOAT,     &cfgRotateDev },
     { "scaleDev",       config_var::FLOAT,     &cfgScaleDev },
-    /* standard deviation of rotation origin from the median point */
+    /* standard deviation of rotation/scaling origin from the median point */
     { "originDev",      config_var::FLOAT,     &cfgOriginDev },
+    /* differential evolution mating settings */
+    { "deMatingProp",   config_var::FLOAT,     &cfgDEMatingProp },
+    { "deMatingCoeff",  config_var::FLOAT,     &cfgDEMatingCoeff },
+    { "deMatingDev",    config_var::FLOAT,     &cfgDEMatingDev },
     /* end-of-table terminator, must be here! */
     { NULL,             config_var::NONE,      NULL }
 };
@@ -97,9 +103,15 @@ public:
     inline static Matrix33 rotation(float alpha);
     inline static Matrix33 scaling(float sx, float sy);
     
+    /* add, subtract, multiply by scalar */
+    inline Matrix33 operator+(const Matrix33 &M) const;
+    inline Matrix33 operator-(const Matrix33 &M) const;
+    inline Matrix33 operator*(float k) const;
+    
     /* multiply by vector and matrix */
     inline POI operator*(const POI &p) const;
     inline Matrix33 operator*(const Matrix33 &M) const;
+    
 };
 
 Matrix33::Matrix33()
@@ -134,6 +146,34 @@ Matrix33 Matrix33::scaling(float sx, float sy)
     Matrix33 ret;
     ret[0][0] = sx; ret[1][1] = sy;
     ret[2][2] = 1.0f;
+    return ret;
+}
+
+Matrix33 Matrix33::operator+(const Matrix33 &M) const
+{
+    const Matrix33 &me = *this;
+    Matrix33 ret;
+    for (int i=0; i<3; i++)
+        for (int j=0; j<3; j++)
+            ret[i][j] = me[i][j]+M[i][j];
+    return ret;
+}
+Matrix33 Matrix33::operator-(const Matrix33 &M) const
+{
+    const Matrix33 &me = *this;
+    Matrix33 ret;
+    for (int i=0; i<3; i++)
+        for (int j=0; j<3; j++)
+            ret[i][j] = me[i][j]-M[i][j];
+    return ret;
+}
+Matrix33 Matrix33::operator*(float k) const
+{
+    const Matrix33 &me = *this;
+    Matrix33 ret;
+    for (int i=0; i<3; i++)
+        for (int j=0; j<3; j++)
+            ret[i][j] = me[i][j]*k;
     return ret;
 }
 
@@ -419,14 +459,15 @@ class Population
         virtual ~EvaluationJob();
         virtual void run();
     };
-    void evaluate();
+    inline void evaluate();
 
     /* roulette selection */
     int roulette(int n);
 
     /* mutations and matings */
-    void makeRandom(Agent *a);
-    void mutation(Agent *a);
+    inline void makeRandom(Agent *a);
+    inline void mutation(Agent *a);
+    inline void deMating(Agent *a, const Agent *p, const Agent *q, const Agent *r);
 
 public:
     Population(const Data *known, const Data *alien);
@@ -541,6 +582,23 @@ void Population::mutation(Agent *a)
                  Random::gaussian(1, cfgScaleDev),
                  Random::gaussian(known->originX, cfgOriginDev * w),
                  Random::gaussian(known->originY, cfgOriginDev * h));
+
+    if(Random::maybe(cfgFlipProp))
+        a->scale(-1, 1,
+                 Random::gaussian(known->originX, cfgOriginDev * w),
+                 Random::gaussian(known->originY, cfgOriginDev * h));
+    if(Random::maybe(cfgFlipProp))
+        a->scale(1, -1,
+                 Random::gaussian(known->originX, cfgOriginDev * w),
+                 Random::gaussian(known->originY, cfgOriginDev * h));
+}
+
+/* --- differential evolution mating */
+void Population::deMating(Agent *a, const Agent *p, const Agent *q, const Agent *r)
+{
+    float factor = Random::gaussian(cfgDEMatingCoeff, cfgDEMatingDev);
+    if(q->fitness < r->fitness) std::swap(q,r);
+    a->M = p->M + (q->M - r->M) * factor;
 }
 
 /* --- the so called main loop */
@@ -566,7 +624,15 @@ void Population::evolve()
 
         int survivors = cfgSurvivalRate * pop.size();
         for(int i=survivors; i<(int)pop.size(); i++)
-            pop[i] = pop[roulette(survivors)];
+            if(Random::maybe(cfgDEMatingProp))
+            {
+                int pi,qi,ri;
+                pi = roulette(survivors);
+                do qi = roulette(survivors); while (qi == pi);
+                do ri = roulette(survivors); while (ri == qi || ri == pi);
+                deMating(&pop[i], &pop[pi], &pop[qi], &pop[ri]);
+            } else
+                pop[i] = pop[roulette(survivors)];
 
         for(int i=0; i<(int)pop.size(); i++)
             mutation(&pop[i]);
