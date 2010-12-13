@@ -3,6 +3,7 @@
 #include <stdarg.h>
 
 #include "image.h"
+#include "composite.h"
 #include "gui.h"
 
 DisplaySlot::DisplaySlot(const char *initname)
@@ -78,13 +79,18 @@ void DisplaySlot::recaption(const char *fmt, ...)
     pthread_mutex_unlock(&lock);
 }
 
-void DisplaySlot::update(const Image &src)
+void DisplaySlot::update(const CairoImage &src)
 {
-    pthread_mutex_lock(&lock);
-    img.setFromImage(src, true);
-    cr_surface = img.getCairoSurface();
-    sendEvent(DS_UPDATE);
-    pthread_mutex_unlock(&lock);
+    getCanvas();
+    img = src;
+    putCanvas();
+}
+
+void DisplaySlot::update(const Image &src, bool transparency)
+{
+    getCanvas();
+    img.fromImage(src, transparency);
+    putCanvas();
 }
 
 void DisplaySlot::bind()
@@ -101,3 +107,14 @@ void DisplaySlot::unbind()
     pthread_mutex_unlock(&lock);
 }
 
+CairoImage *DisplaySlot::getCanvas()
+{
+    pthread_mutex_lock(&lock);
+    return &img;
+}
+void DisplaySlot::putCanvas()
+{
+    cr_surface = img.getCairoSurface();
+    sendEvent(DS_UPDATE);
+    pthread_mutex_unlock(&lock);
+}

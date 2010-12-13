@@ -17,17 +17,20 @@ enum {
     DS_CLEANUP = 64,
 };
 
+#ifndef CAIRO_H
+typedef struct _cairo_surface cairo_surface_t;
+#endif
+
 struct displayslot
 {
     int events; /* events queued up to this point */
-    
-    char *name, *caption; /* name and caption */
-    void *cr_surface; /* cairo_sufrace_t */
+    char *name, *caption;
+    cairo_surface_t *cr_surface;
 
     struct {
         int stamp;
         void *user_data, *user_data2, *user_data3;
-    } iter;
+    } iter; /* GtkTreeIter */
 
     pthread_mutex_t lock;
     pthread_cond_t cond;

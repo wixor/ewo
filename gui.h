@@ -2,6 +2,7 @@
 #define __GUI_H__
 
 #include "image.h"
+#include "composite.h"
 #include "gui-gtk.h"
 
 class DisplaySlot : private displayslot
@@ -17,9 +18,13 @@ public:
 
     void rename(const char *fmt, ...);
     void recaption(const char *fmt, ...);
-    void update(const Image &src);
+    void update(const CairoImage &src);
+    void update(const Image &src, bool transparency = false);
     void bind();
     void unbind();
+
+    CairoImage *getCanvas();
+    void putCanvas();
 };
 
 #endif

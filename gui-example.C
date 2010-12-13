@@ -6,7 +6,7 @@
 int main(int argc, char *argv[])
 {
     gui_gtk_init(&argc, &argv);
-
+    
     {    
         DisplaySlot ds("");
         ds.rename("moj display slot numer %d", 42);

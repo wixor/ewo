@@ -9,7 +9,6 @@
 #include <sys/eventfd.h>
 
 #include <gtk/gtk.h>
-#include <gdk/gdkx.h>
 
 #include "gui-gtk.h"
 
@@ -161,7 +160,7 @@ static void displayarea_update(struct displayarea *da)
 {
     if(da->slot)
     {
-        cairo_surface_t *s = (cairo_surface_t *)da->slot->cr_surface;
+        cairo_surface_t *s = da->slot->cr_surface;
         int w = cairo_image_surface_get_width(s),
             h = cairo_image_surface_get_height(s);
 
