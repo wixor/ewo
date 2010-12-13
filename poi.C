@@ -110,8 +110,8 @@ float DifferenceJob::evalAt(int x, int y) const
 
 void DifferenceJob::run()
 {
-    debug("difference job starting, bounding box (%d,%d) - (%d,%d), dx=%lf, dy=%lf, scale=%lf\n",
-           x1,y1,x2,y2,dx,dy,scale);
+    /* debug("difference job starting, bounding box (%d,%d) - (%d,%d), dx=%lf, dy=%lf, scale=%lf\n",
+           x1,y1,x2,y2,dx,dy,scale); <- chyba juz niepotrzebne */
 
     for(int y = y1; y<=y2; y++)
         for(int x = x1; x<=x2; x++)
@@ -212,22 +212,10 @@ Image reduceEvaluationToImage(const Array2D<float> &eval)
     return ret;
 }
 
-std::vector<POI> findPOIs(const Array2D<float> &eval, float threshold, int count)
+std::vector<POI> findPOIs(const std::vector<POI> &all, int W, int H, float threshold, int count, float tabuSizeParam)
 {
-    const float R0 = 20.0;
-
-    int w = eval.getWidth(), h = eval.getHeight();
-
-    Image tabu(w, h);
+    Image tabu(W, H);
     tabu.fill(0);
-
-    std::vector<POI> all;
-    for(int y=0; y<h; y++)
-        for(int x=0; x<w; x++)
-            all.push_back(POI(x,y,eval[y][x]));
-
-    std::sort(all.begin(), all.end());
-
     std::vector<POI> pois;
 
     for(int i=0; i<(int)all.size() && (int)pois.size() < count; i++)
@@ -239,7 +227,7 @@ std::vector<POI> findPOIs(const Array2D<float> &eval, float threshold, int count
         
         pois.push_back(curr);
         
-        float R = R0*3.0 - 2.0*R0*std::min(curr.val,1.0f);
+        float R = tabuSizeParam*(W+H)/curr.val;
         int iR = R;
 
         for (int y=-iR; y<=iR; y++)
@@ -249,6 +237,40 @@ std::vector<POI> findPOIs(const Array2D<float> &eval, float threshold, int count
     }
 
     return pois;
+}
+    
+std::vector<POI> findPOIs(const Array2D<float> &eval, float threshold, int count)
+{
+    return findPOIs(eval, threshold, count, 0);
+}
+std::vector<POI> findPOIs(const Array2D<float> &eval, float threshold, int count, float tabuSizeParam)
+{
+    int w = eval.getWidth(), h = eval.getHeight();
+
+    std::vector<POI> all;
+    for(int y=0; y<h; y++)
+        for(int x=0; x<w; x++)
+            all.push_back(POI(x,y,eval[y][x]));
+
+    std::sort(all.begin(), all.end());
+    
+    if (tabuSizeParam != 0.0f) return findPOIs(all, w, h, threshold, count, tabuSizeParam);
+    
+    float downval = 0.1f, upval = 8.0f, midval;
+    std::vector<POI> ret;
+    while (upval-downval > 0.1f)
+    {
+        midval = (upval+downval)/2.0f;
+        ret = findPOIs(all, w, h, threshold, count*4/3, midval);
+        if ((int)ret.size() == count) break;
+        if ((int)ret.size() > count) //za duzo punktow, wiec za male tabu
+            downval = midval;
+        else
+            upval = midval;
+    }
+    debug("found %d pois (looking for %d). threshold = %f, tabuParam = %f\n", ret.size(), count, threshold, midval);
+    
+    return ret;
 }
     
 void overlayPOIs(const std::vector<POI> &pois, Image *dst)
