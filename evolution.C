@@ -438,7 +438,7 @@ int Population::roulette(int n)
         else
             y -= pop[i].fitness;
 
-    fprintf(stderr, "WARNING: roulette selection failed, residual %e", y);
+    fprintf(stderr, "WARNING: roulette selection failed, residual %e\n", y);
     return 0;
 }
 
