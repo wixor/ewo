@@ -1,63 +1,54 @@
 #ifndef __IMAGE_H__
 #define __IMAGE_H__
 
-#include <stdint.h>
+#include <cstdlib>
 #include <cstring>
-#include <cstdio>
+#include <stdint.h>
+#include <stdexcept>
 
 template <typename T> class Array2D
 {
 protected:
     int width, height;
     T *data;
+
+    inline void _init() { width = height = 0; data = NULL; }
 public:
-    inline Array2D(int w, int h)
-    {
-        width = w;
-        height = h;
-        data = new T[width*height];
-    }
-    inline Array2D(const Array2D<T> &im)
-    {
-        width = im.width;
-        height = im.height;
-        data = new T[width*height];
-        memcpy(data, im.data, width*height*sizeof(T));
-    }
-    virtual ~Array2D() {
-        delete data;
-    }
+    inline Array2D() { _init(); }
+    inline Array2D(int w, int h) { _init(); resize(w,h); }
+    inline Array2D(const Array2D<T> &im) { _init(); (*this) = im; }
+    inline ~Array2D() { free(data); }
     
-    inline T* operator[](int row) { return data+row*width; }
-    inline const T* operator[](int row) const { return data+row*width; }
+    inline T* operator[](int row) const { return data + row*width; }
 
-    inline void operator=(const Array2D<T>& im)
+    inline void resize(int w, int h)
     {
-        if(width != im.width || height != im.height)
-        {
-            width = im.width;
-            height = im.height;
+        if(width == w && height == h)
+            return;
+        width = w; height = h;
+        data = (T *)realloc(data, width*height*sizeof(T));
+        if(!data) throw std::bad_alloc();
+    }
 
-            delete data;
-            data = new T[width*height];
-        }
+    inline Array2D<T>& operator=(const Array2D<T>& im)
+    {
+        resize(im.width, im.height);
         memcpy(data, im.data, width*height*sizeof(T));
+        return *this;
     }
     
     inline int getWidth() const { return width; }
     inline int getHeight() const { return height; }
     inline bool inside(int x, int y) const { return x>=0 && y>=0 && x<width && y<height; }
 };
-        
 
 class Image : public Array2D<uint8_t>
 {
 public:
-    Image(const Image& im) : Array2D<uint8_t>(im) {}
-    Image(int w, int h) : Array2D<uint8_t>(w, h) {}
+    inline Image() { }
+    inline Image(const Image& im) : Array2D<uint8_t>(im) {}
+    inline Image(int w, int h) : Array2D<uint8_t>(w, h) {}
     
-    inline bool isOpaque(int x, int y) const { return (*this)[y][x] != 0; }
-
     static Image readPGM(FILE *file);
     static Image readPGM(const char *filename);
     void writePGM(FILE* file) const;
@@ -67,6 +58,37 @@ public:
     void drawRect(int x0, int x1, int y0, int y1, uint8_t val);
 
     uint32_t checksum() const;
+};
+
+class CairoImage
+{
+    int width, height, stride;
+    void *data;
+    void *cr_surface;
+
+    inline void _init() { width = height = 0; cr_surface = data = NULL; }
+public:
+    inline CairoImage() { _init(); }
+    inline CairoImage(int w, int h) { _init(); resize(w,h); }
+    inline CairoImage(const CairoImage &im) { _init(); (*this)=im; }
+    ~CairoImage();
+    
+    inline CairoImage& operator=(const CairoImage &im) {
+        resize(im.width, im.height);
+        memcpy(data, im.data, height*stride);
+        return *this;
+    }
+
+    void setFromImage(const Image &im, bool transparency = false);
+
+    void resize(int w, int h);
+
+    inline uint32_t* operator[](int row) const { return (uint32_t *)((char *)data + row*stride); }
+
+    inline int getWidth() const { return width; }
+    inline int getHeight() const { return height; }
+    inline void *getCairoSurface() const { return cr_surface; }
+    inline bool inside(int x, int y) const { return x>=0 && y>=0 && x<width && y<height; }
 };
 
 #endif

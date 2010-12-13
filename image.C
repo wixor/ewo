@@ -1,6 +1,7 @@
 #include <cstdlib>
 #include <cstdio>
 #include <cstring>
+#include <cairo.h>
 
 #include <algorithm>
 #include <stdexcept>
@@ -85,5 +86,42 @@ uint32_t Image::checksum() const
     sum2 = (sum2 & 0xffff) + (sum2 >> 16);
     
     return sum2 << 16 | sum1;
+}
+
+/* ------------------------------------------------------------------------- */
+
+CairoImage::~CairoImage() {
+    if(cr_surface)
+        cairo_surface_destroy((cairo_surface_t *)cr_surface);
+}
+
+void CairoImage::resize(int w, int h)
+{
+    if(width == w && height == h)
+        return;
+
+    if(cr_surface)
+        cairo_surface_destroy((cairo_surface_t *)cr_surface);
+
+    width = w; height = h;
+    stride = cairo_format_stride_for_width(CAIRO_FORMAT_RGB24, width);
+
+    data = realloc(data, height*stride);
+    if(data == NULL)
+        throw std::bad_alloc();
+
+    cr_surface = cairo_image_surface_create_for_data((unsigned char *)data, CAIRO_FORMAT_RGB24, width, height, stride);
+    if(cairo_surface_status((cairo_surface_t *)cr_surface) == CAIRO_STATUS_NO_MEMORY)
+        throw std::bad_alloc();
+}
+
+void CairoImage::setFromImage(const Image &im, bool transparency)
+{
+    resize(im.getWidth(), im.getHeight());
+    for(int y=0; y<height; y++)
+        for(int x=0; x<width; x++)
+            (*this)[y][x] = (transparency && im[y][x] == 0)
+                                ? (((x>>5) ^ (y>>5)) & 1) ? 0xe0e0e0 : 0xc0c0c0
+                                : 0x010101*im[y][x];
 }
 
