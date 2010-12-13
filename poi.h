@@ -7,6 +7,7 @@
 
 Array2D<float> evaluateImage(const Image &src, int steps, const std::vector<float> &scales);
 Image reduceEvaluationToImage(const Array2D<float> &eval);
+std::vector<POI> findPOIs(const Array2D<float> &eval, float threshold, int count, float param);
 std::vector<POI> findPOIs(const Array2D<float> &eval, float threshold, int count);
 void overlayPOIs(const std::vector<POI> &pois, Image *dst);
 Image renderPOIs(const std::vector<POI> &pois, int w, int h);
