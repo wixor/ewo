@@ -9,7 +9,6 @@
 #include <sys/eventfd.h>
 
 #include <gtk/gtk.h>
-#include <gdk/gdkx.h>
 
 #include "gui-gtk.h"
 
@@ -159,9 +158,13 @@ static void displayarea_cleanup(struct displayarea *da)
 
 static void displayarea_update(struct displayarea *da)
 {
-    if(da->slot) {
-        int w = da->slot->width*da->scale, h = da->slot->height*da->scale;
-        gtk_layout_set_size(da->area, w,h);
+    if(da->slot)
+    {
+        cairo_surface_t *s = da->slot->cr_surface;
+        int w = cairo_image_surface_get_width(s),
+            h = cairo_image_surface_get_height(s);
+
+        gtk_layout_set_size(da->area, w*da->scale,h*da->scale);
     }
     gtk_widget_queue_draw(GTK_WIDGET(da->area));
 }
@@ -189,16 +192,6 @@ static void displayarea_set_slot(struct displayarea *da, struct displayslot *ds)
 }
 
 /* ------------------------------------------------------------------------- */
-
-enum {
-    DS_INIT = 1,
-    DS_UPDATE = 2,
-    DS_RENAME = 4,
-    DS_RECAPTION = 8,
-    DS_BIND = 16,
-    DS_UNBIND = 32,
-    DS_CLEANUP = 64,
-};
 
 static int efd;
 
@@ -266,145 +259,6 @@ static void efd_init(void)
     g_io_add_watch(gioc, G_IO_IN, efd_readable, NULL);
 }
 
-static void efd_poke(void)
-{
-    eventfd_write(efd, 1);
-}
-
-/* ------------------------------------------------------------------------- */
-
-static void displayslot_surface_resize(struct displayslot *ds, int width, int height)
-{
-    if(ds->width == width && ds->height == height)
-        return;
-
-    if(ds->cr_surface)
-        cairo_surface_destroy(ds->cr_surface);
-
-    int stride = cairo_format_stride_for_width(CAIRO_FORMAT_RGB24, width);
-
-    ds->data = realloc(ds->data, height*stride);
-    ds->width = width;
-    ds->height = height;
-    ds->stride = stride;
-
-    ds->cr_surface =
-        cairo_image_surface_create_for_data(
-                ds->data, CAIRO_FORMAT_RGB24, width, height, stride);
-}
-static void displayslot_surface_init(struct displayslot *ds)
-{
-    ds->width = ds->height = ds->stride = -1;
-    ds->data = NULL; ds->cr_surface = NULL;
-    displayslot_surface_resize(ds, 128,128);
-}
-static void displayslot_surface_destroy(struct displayslot *ds)
-{
-    if(ds->cr_surface)
-        cairo_surface_destroy(ds->cr_surface);
-    free(ds->data);
-}
-
-
-static void displayslot_event(struct displayslot *ds, int ev) {
-    ds->events |= ev;
-    efd_poke();
-}
-static void displayslot_event_sync(struct displayslot *ds, int ev)
-{
-    displayslot_event(ds, ev);
-    pthread_cond_wait(&ds->cond, &ds->lock);
-}
-
-void displayslot_init(struct displayslot *ds, char *name)
-{
-    pthread_mutex_init(&ds->lock, NULL);
-    pthread_cond_init(&ds->cond, NULL);
-
-    ds->events = 0;
-    ds->name = name;
-    ds->caption = strdup("");
-    displayslot_surface_init(ds);
-
-    pthread_mutex_lock(&slots_lock);
-    slots = g_list_prepend(slots, ds);
-    pthread_mutex_unlock(&slots_lock);
-
-    pthread_mutex_lock(&ds->lock);
-    displayslot_event_sync(ds, DS_INIT);
-    pthread_mutex_unlock(&ds->lock);
-}
-
-void displayslot_cleanup(struct displayslot *ds)
-{
-    pthread_mutex_lock(&ds->lock);
-    displayslot_event_sync(ds, DS_CLEANUP);
-    pthread_mutex_unlock(&ds->lock);
-    
-    pthread_mutex_lock(&slots_lock);
-    slots = g_list_remove(slots, ds);
-    pthread_mutex_unlock(&slots_lock);
-    
-    displayslot_surface_destroy(ds);
-    free(ds->caption);
-    free(ds->name);
-
-    pthread_cond_destroy(&ds->cond);
-    pthread_mutex_destroy(&ds->lock);
-}
-
-void displayslot_rename(struct displayslot *ds, char *name)
-{
-    pthread_mutex_lock(&ds->lock);
-    free(ds->name);
-    ds->name = name;
-    displayslot_event(ds, DS_RENAME);
-    pthread_mutex_unlock(&ds->lock);
-}
-
-void displayslot_recaption(struct displayslot *ds, char *caption)
-{
-    pthread_mutex_lock(&ds->lock);
-    free(ds->caption);
-    ds->caption = caption;
-    displayslot_event(ds, DS_RECAPTION);
-    pthread_mutex_unlock(&ds->lock);
-}
-
-void displayslot_update(struct displayslot *ds, int width, int height, const void *data)
-{
-    pthread_mutex_lock(&ds->lock);
-
-    displayslot_surface_resize(ds, width, height);    
-
-    for(int y=0; y<height; y++)
-        for(int x=0; x<width; x++)
-        {
-            uint32_t transparency = (((x>>4)^(y>>4)) & 1) ? 0xe0e0e0 : 0xc0c0c0;
-            uint8_t src = ((uint8_t *)data)[x + y*width];
-            uint32_t *dst = (uint32_t *)((uint8_t *)ds->data + y*ds->stride) + x;
-            *dst = src ? (0x010101 * src) : transparency;
-        }
-
-    displayslot_event(ds, DS_UPDATE);
-    
-    pthread_mutex_unlock(&ds->lock);
-}
-
-void displayslot_bind(struct displayslot *ds)
-{
-    pthread_mutex_lock(&ds->lock);
-    displayslot_event(ds, DS_BIND);
-    pthread_mutex_unlock(&ds->lock);
-}
-
-void displayslot_unbind(struct displayslot *ds)
-{
-    pthread_mutex_lock(&ds->lock);
-    displayslot_event(ds, DS_UNBIND);
-    pthread_mutex_unlock(&ds->lock);
-}
-
 /* ------------------------------------------------------------------------- */
 
 /* these are tentative definitions (ever heard of them?), supplemented with
@@ -416,6 +270,25 @@ static const guint8 icoQuad[] __attribute__ ((__aligned__ (4)));
 
 static GtkToolbar *toolbar;
 static GtkToolButton *single, *hsplit, *vsplit, *quad;
+
+void gui_gtk_poke(void)
+{
+    eventfd_write(efd, 1);
+}
+
+void gui_gtk_register(struct displayslot *ds)
+{
+    pthread_mutex_lock(&slots_lock);
+    slots = g_list_prepend(slots, ds);
+    pthread_mutex_unlock(&slots_lock);
+}
+
+void gui_gtk_unregister(struct displayslot *ds)
+{
+    pthread_mutex_lock(&slots_lock);
+    slots = g_list_remove(slots, ds);
+    pthread_mutex_unlock(&slots_lock);
+}
 
 static void gui_destroy(GtkWidget *widget, gpointer data)
 {

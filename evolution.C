@@ -1,8 +1,8 @@
 #include <cstdlib>
+#include <cstdio>
 #include <cmath>
 #include <cassert>
 #include <ctype.h>
-#include <unistd.h>
 #include <vector>
 #include <string>
 #include <algorithm>
@@ -90,115 +90,6 @@ static void parsePOIScales(const char *value)
 
 /* ------------------------------------------------------------------------ */
 
-class Matrix33
-{
-    float data[9];
-
-public:
-    inline Matrix33();
-    virtual ~Matrix33();
-    
-    inline float* operator[](int row) { return data+row*3; }
-    inline const float* operator[](int row) const { return data+row*3; }
-
-    inline static Matrix33 translation(float dx, float dy);
-    inline static Matrix33 rotation(float alpha);
-    inline static Matrix33 scaling(float sx, float sy);
-    
-    /* add, subtract, multiply by scalar */
-    inline Matrix33 operator+(const Matrix33 &M) const;
-    inline Matrix33 operator-(const Matrix33 &M) const;
-    inline Matrix33 operator*(float k) const;
-    
-    /* multiply by vector and matrix */
-    inline POI operator*(const POI &p) const;
-    inline Matrix33 operator*(const Matrix33 &M) const;
-    
-};
-
-Matrix33::Matrix33()
-{
-    Matrix33 &me = *this;
-    me[0][0] = me[1][1] = me[2][2] = 1;
-    me[0][1] = me[0][2] = me[1][0] = me[1][2] = me[2][0] = me[2][1] = 0;
-}
-
-Matrix33::~Matrix33()
-{
-    /* empty */
-}
-
-Matrix33 Matrix33::translation(float dx, float dy)
-{
-    Matrix33 ret;
-    ret[0][0] = ret[1][1] = ret[2][2] = 1.0f;
-    ret[0][2] = dx; ret[1][2] = dy;
-    return ret;
-}
-Matrix33 Matrix33::rotation(float alpha)
-{
-    Matrix33 ret;
-    ret[0][0] = ret[1][1] = cosf(alpha);
-    ret[1][0] = -(ret[0][1] = sinf(alpha));
-    ret[2][2] = 1.0f;
-    return ret;
-}
-Matrix33 Matrix33::scaling(float sx, float sy)
-{
-    Matrix33 ret;
-    ret[0][0] = sx; ret[1][1] = sy;
-    ret[2][2] = 1.0f;
-    return ret;
-}
-
-Matrix33 Matrix33::operator+(const Matrix33 &M) const
-{
-    const Matrix33 &me = *this;
-    Matrix33 ret;
-    for (int i=0; i<3; i++)
-        for (int j=0; j<3; j++)
-            ret[i][j] = me[i][j]+M[i][j];
-    return ret;
-}
-Matrix33 Matrix33::operator-(const Matrix33 &M) const
-{
-    const Matrix33 &me = *this;
-    Matrix33 ret;
-    for (int i=0; i<3; i++)
-        for (int j=0; j<3; j++)
-            ret[i][j] = me[i][j]-M[i][j];
-    return ret;
-}
-Matrix33 Matrix33::operator*(float k) const
-{
-    const Matrix33 &me = *this;
-    Matrix33 ret;
-    for (int i=0; i<3; i++)
-        for (int j=0; j<3; j++)
-            ret[i][j] = me[i][j]*k;
-    return ret;
-}
-
-POI Matrix33::operator*(const POI &p) const
-{
-    const Matrix33 &me = *this;
-    return POI(me[0][0]*p.x + me[0][1]*p.y + me[0][2], 
-               me[1][0]*p.x + me[1][1]*p.y + me[1][2],
-               p.val);
-}
-
-Matrix33 Matrix33::operator*(const Matrix33 &M) const
-{
-    const Matrix33 &me = *this;
-    Matrix33 ret;
-    for (int i=0; i<3; i++)
-        for (int j=0; j<3; j++)
-            ret[i][j] = me[i][0]*M[0][j] + me[i][1]*M[1][j] + me[i][2]*M[2][j];
-    return ret;
-}
-
-/* ------------------------------------------------------------------------ */
-
 class Random
 {
 public:
@@ -248,7 +139,7 @@ public:
     Image *raw;
     std::vector<POI> pois;
     int originX, originY; /* median of POIs */
-    /* + more to come (handle for opengl images compositing) */
+    CairoImage compimg; /* image for compositing */
 
     static Data build(const char *filename);
 
@@ -266,6 +157,8 @@ Data Data::build(const char *filename)
         ret.findOrigin();
         ret.writeCache(filename);
     }
+
+    Composite::prepare(*ret.raw, &ret.compimg);
 
     return ret;
 }
@@ -395,6 +288,8 @@ class Agent
 public:
     Matrix33 M; /* the transformation matrix */
     float distance; /* point cloud distance */ 
+    float difference; /* image difference metric */
+    float target; /* target function, computed from the above */
     float fitness; /* population-wide fitness factor */
 
     /* agents ordering */
@@ -457,7 +352,7 @@ class Population
     {
     public:
         Population *uplink;
-        int from, to;
+        Agent *agent;
         virtual ~EvaluationJob();
         virtual void run();
     };
@@ -496,43 +391,43 @@ static float matchPOIs(const std::vector<POI> &a, const std::vector<POI> &b)
 }
 void Population::EvaluationJob::run()
 {
-    const Data *known = uplink->known,
-               *alien = uplink->alien;
+    const Data *alien = uplink->alien, *known = uplink->known;
 
-    for(int i=from; i<to; i++)
-    {
-        Agent *a = &uplink->pop[i];
-        std::vector<POI> xformed = known->transformPOIs(a->M);
-        a->distance = -matchPOIs(xformed, alien->pois)
+    std::vector<POI> xformed = known->transformPOIs(agent->M);
+    agent->distance = -matchPOIs(xformed, alien->pois)
                       -matchPOIs(alien->pois, xformed);
-    }
-} 
+    agent->distance /= alien->pois.size() + known->pois.size();
+
+    agent->difference = 0;//-Composite::difference(known->compimg, *alien->raw, agent->M);
+    
+    agent->target = agent->distance;
+}
 void Population::evaluate()
 {
-    const int jobSlice = 200;
-    int nJobs = (pop.size() + jobSlice - 1) / jobSlice;
-    EvaluationJob jobs[nJobs];
+    EvaluationJob jobs[pop.size()];
     Completion c;
     
-    for(int i=0; i<nJobs; i++) {
+    for(int i=0; i<(int)pop.size(); i++) {
         jobs[i].completion = &c;
-        jobs[i].from = jobSlice*i;
-        jobs[i].to = std::min(jobSlice*(i+1), (int)pop.size());
+        jobs[i].agent = &pop[i];
         jobs[i].uplink = this;
         aq->queue(&jobs[i]);
     }
 
     c.wait();
 
-    float minDistance = 1e+30;
+    float minTarget = 1e+30;
     for(int i=0; i<(int)pop.size(); i++)
-        minDistance = std::min(minDistance, pop[i].distance);
+        minTarget = std::min(minTarget, pop[i].target);
+
     float denominator = 0;
     for(int i=0; i<(int)pop.size(); i++)
-        denominator += pop[i].distance - minDistance;
+        denominator += pop[i].target - minTarget;
     assert(denominator > 1e-5);
+    denominator = 1.f/denominator;
+
     for(int i=0; i<(int)pop.size(); i++)
-        pop[i].fitness = (pop[i].distance - minDistance) / denominator;
+        pop[i].fitness = (pop[i].target - minTarget) * denominator;
 
     std::sort(pop.begin(), pop.end());
 }
@@ -600,7 +495,7 @@ void Population::mutation(Agent *a)
 /* --- differential evolution mating */
 void Population::deMating(Agent *a, const Agent *p, const Agent *q, const Agent *r)
 {
-    float factor = Random::gaussian(cfgDEMatingCoeff, cfgDEMatingDev);
+    float factor = fabs(Random::gaussian(cfgDEMatingCoeff, cfgDEMatingDev));
     if(q->fitness < r->fitness) std::swap(q,r);
     a->M = p->M + (q->M - r->M) * factor;
 }
@@ -612,20 +507,42 @@ void Population::evolve()
     for(int i=0; i<(int)pop.size(); i++)
         makeRandom(&pop[i]);
 
-    DisplaySlot best("best fit");
-    best.bind();
+    DisplaySlot best("best fit (POIs)");
 
-    for(int gencnt = 0;; gencnt ++)
+    DisplaySlot bestIm("best fit (image)");
+    { CairoImage *bestImCanvas = bestIm.getCanvas();
+      bestImCanvas->resize(alien->raw->getWidth(), alien->raw->getHeight());
+      bestIm.putCanvas(); }
+    
+    DisplaySlot diffIm("best fit (difference)");
+    { CairoImage *diffImCanvas = diffIm.getCanvas();
+      diffImCanvas->resize(alien->raw->getWidth(), alien->raw->getHeight());
+      diffIm.putCanvas(); }
+
+    diffIm.bind();
+
+    for(int gencnt=1;;gencnt++)
     {
         evaluate();
 
-        best.update(renderPOIs(known->transformPOIs(pop[0].M),
-                               alien->raw->getWidth(), alien->raw->getHeight()));
-        best.recaption("best fit: generation: %d, avg dist %.2f%, fitness %f\nd=(%.0f,%.0f), s=(%.2f,%.2f), a=%.3f",
-                       gencnt,
-                       -100.0f*pop[0].distance/(known->pois.size()+alien->pois.size())/(alien->raw->getWidth()+alien->raw->getHeight()), 
-                       pop[0].fitness,
-                       pop[0].dx(),pop[0].dy(),pop[0].sx(),pop[0].sy(),pop[0].alfa()/M_PI*180.0);
+        {
+            best.update(renderPOIs(known->transformPOIs(pop[0].M),
+                                   alien->raw->getWidth(), alien->raw->getHeight()));
+            diffIm.recaption("gen: %d, best fit: dist %.2f, diff %.2f, target %.2f fitness %f\nd=(%.0f,%.0f), s=(%.2f,%.2f), a=%.3f",
+                             gencnt,
+                             pop[0].distance, pop[0].difference, pop[0].target, pop[0].fitness,
+                             pop[0].dx(),pop[0].dy(),pop[0].sx(),pop[0].sy(),pop[0].alfa()/M_PI*180.0);
+
+            CairoImage *bestImCanvas = bestIm.getCanvas();
+            Composite::transform(known->compimg, pop[0].M, bestImCanvas);
+            bestIm.putCanvas();
+            
+            CairoImage *diffImCanvas = diffIm.getCanvas();
+            Composite::difference(known->compimg, *alien->raw, pop[0].M, diffImCanvas);
+            diffIm.putCanvas();
+
+            printf("%f\n", pop[0].target);
+        }
 
         int survivors = cfgSurvivalRate * pop.size();
         for(int i=survivors; i<(int)pop.size(); i++)
