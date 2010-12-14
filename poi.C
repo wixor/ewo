@@ -3,6 +3,8 @@
 #include <cmath>
 #include <vector>
 #include <algorithm>
+#include <stdexcept>
+
 
 #include "workers.h"
 #include "image.h"
@@ -288,6 +290,116 @@ Image renderPOIs(const std::vector<POI> &pois, int w, int h)
 }
 
 /* ------------------------------------------------------------------------ */
+
+class GaussianJob : public AsyncJob
+{
+public:
+    int W, H, borderW;
+    float deviation;
+    const Image *src, *imgSrc2;
+    Array2D<float> *imgDest;
+    int fromY, toY;
+    
+    virtual ~GaussianJob();
+    virtual void run();
+    GaussianJob(int w, int h, int border, float deviation, const Image* src, Array2D<float> *dest) : 
+        W(w), H(h), borderW(border), deviation(deviation), src(src), imgDest(dest) {}
+    GaussianJob() {}
+};
+
+GaussianJob::~GaussianJob() { /* empty */ }
+
+void GaussianJob::run()
+{
+    debug("running %d %d\n", fromY, toY);
+    const int R = 1+(int)2.0f*deviation; //regula 2 sigm :D
+    
+    float sumweight = 0.0f;
+    float distr[2*R+1][2*R+1];
+    for (int dx=-R; dx<=R; dx++)
+        for (int dy=-R; dy<=R; dy++) {
+            distr[R+dy][R+dx] = expf(-(float)(dx*dx)/(2.0f*deviation*deviation)) *
+                                expf(-(float)(dy*dy)/(2.0f*deviation*deviation));
+            // distr[R+dy][R+dx] = 1.0f/(2*R+1)/(2*R+1);
+            sumweight += distr[R+dy][R+dx];
+        }
+    
+    debug("sumweight = %f\n", sumweight); //2*pi*dev?
+    
+    for (int y=std::max(R,fromY); y<std::min(toY,H-R); y++)
+        for (int x=std::max(R,borderW); x<std::min(W-R, W-borderW); x++)
+        {
+            float sumval = 0.0f;
+            for (int dx=-R; dx<=R; dx++)
+                for (int dy=-R; dy<=R; dy++) {
+                        const float &f = distr[R+dy][R+dx];
+                        sumval += f * (*src)[y+dy][x+dx];
+                    }
+            (*imgDest)[y][x] = sumval/sumweight;
+            // debug("y = %d, x = %d. sumw = %f, val = %f\n", y, x, sumweight, (*imgDest)[y][x]);
+        }
+    debug("done %d %d\n", fromY, toY);
+}
+
+Array2D<float> gaussianBlur(const Image& img, float deviation, int border)
+{
+    int H = img.getHeight(), W = img.getWidth();
+    Array2D<float> retimg(W, H);
+    
+    const int JobSlice = 50;
+    int nJobs = 1+(H-2*border)/JobSlice;
+    GaussianJob GJ[nJobs];
+    Completion C;
+    for (int i=0; i<nJobs; i++)
+    {
+        GJ[i] = GaussianJob(W, H, border, deviation, &img, &retimg);
+        GJ[i].completion = &C;
+        GJ[i].fromY = border + i*JobSlice;
+        GJ[i].toY = std::min(H-border, border+(i+1)*JobSlice);
+        debug("queuing %d %d\n", GJ[i].fromY, GJ[i].toY);
+        aq->queue(&GJ[i]);
+    }
+    C.wait();
+    
+    return retimg;
+}
+
+Image renderGaussianDifference(const Image& img1, const Image img2, float deviation, int border, bool smart)
+{
+    int H1 = img1.getHeight(), W1 = img1.getWidth(),
+        H2 = img2.getHeight(), W2 = img2.getWidth();
+        
+    if (W1 != W2 || H1 != H2)
+        fprintf(stderr, "WARNING: wrong image dimensions (difference gauss), truncating to smaller\n");
+    
+    int W = std::min(W1, W2), H = std::min(H1,H2);
+    
+    Array2D<float> eval1 = gaussianBlur(img1, deviation, border);
+    debug("blur 1 has been done\n");
+    Array2D<float> eval2 = gaussianBlur(img2, deviation, border);
+    debug("blur 2 has been done\n");
+    
+    Image ret(W, H);
+    for (int y=0; y<H; y++)
+        for (int x=0; x<W; x++) {
+            if (!smart)
+                ret[y][x] = std::max(1, std::min(255, (int)abs(eval1[y][x]-eval2[y][x])));
+            else {
+                ret[y][x] = 255;
+                for (int dx=-deviation-1; dx<=deviation+1; dx++)
+                    for (int dy=-deviation-1; dy<=deviation+1; dy++) 
+                        if (ret.inside(x+dx, y+dy)) {
+                            ret[y][x] = (uint8_t)std::min((int)ret[y][x],
+                                            std::max(1, std::min(255, (int)abs(eval1[y][x]-eval2[y+dy][x+dx])))/2 +
+                                            std::max(1, std::min(255, (int)abs(eval2[y][x]-eval1[y+dy][x+dx])))/2);
+                        }
+            }
+        }
+    return ret;
+}
+
+// Image renderSmartGaussian(const Image& img1, const Image& img2, float deviation, int border)
+
 
 /*
 int main(int argc, char *argv[])

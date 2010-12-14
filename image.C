@@ -87,3 +87,6 @@ uint32_t Image::checksum() const
     return sum2 << 16 | sum1;
 }
 
+
+
+

@@ -26,6 +26,7 @@ static int cfgThreads;
 static int cfgPOISteps;
 static std::vector<float> cfgPOIScales;
 static float cfgPOIThreshold;
+static float cfgPOITabuParam;
 static int cfgPOICount;
 static int cfgPopulationSize;
 static float cfgSurvivalRate;
@@ -42,6 +43,7 @@ static struct config_var cfgvars[] = {
     { "poiScales",      config_var::CALLBACK,  (void *)&parsePOIScales },
     { "poiCount",       config_var::INT,       &cfgPOICount },
     { "poiThreshold",   config_var::FLOAT,     &cfgPOIThreshold },
+    { "poiTabuParam",   config_var::FLOAT,     &cfgPOITabuParam },
     /* evolution */
     { "populationSize", config_var::INT,       &cfgPopulationSize },
     { "survivalRate",   config_var::FLOAT,     &cfgSurvivalRate },
@@ -271,7 +273,7 @@ Data Data::build(const char *filename)
 void Data::findPOIs()
 {
     Array2D<float> eval = ::evaluateImage(*raw, cfgPOISteps, cfgPOIScales);
-    pois = ::findPOIs(eval, cfgPOIThreshold, cfgPOICount);
+    pois = ::findPOIs(eval, cfgPOIThreshold, cfgPOICount, cfgPOITabuParam);
 }
 
 void Data::findOrigin()
@@ -478,6 +480,8 @@ public:
 Population::EvaluationJob::~EvaluationJob() {
     /* empty */
 }
+
+/* dla każdego punktu z a najbliższy mu z b */
 static float matchPOIs(const std::vector<POI> &a, const std::vector<POI> &b)
 {
     float sum = 0;
@@ -502,7 +506,7 @@ void Population::EvaluationJob::run()
         a->distance = -matchPOIs(xformed, alien->pois)
                       -matchPOIs(alien->pois, xformed);
     }
-}
+} 
 void Population::evaluate()
 {
     const int jobSlice = 200;
@@ -547,7 +551,7 @@ int Population::roulette(int n)
         else
             y -= pop[i].fitness;
 
-    fprintf(stderr, "WARNING: roulette selection failed, residual %e", y);
+    fprintf(stderr, "WARNING: roulette selection failed, residual %e\n", y);
     return 0;
 }
 
@@ -611,16 +615,17 @@ void Population::evolve()
     DisplaySlot best("best fit");
     best.bind();
 
-    for(;;)
+    for(int gencnt = 0;; gencnt ++)
     {
         evaluate();
 
         best.update(renderPOIs(known->transformPOIs(pop[0].M),
                                alien->raw->getWidth(), alien->raw->getHeight()));
-        best.recaption("best fit: dist %.2f, fitness %f\nd=(%.0f,%.0f), s=(%.2f,%.2f), a=%.3f",
-                       pop[0].distance, pop[0].fitness,
+        best.recaption("best fit: generation: %d, avg dist %.2f%, fitness %f\nd=(%.0f,%.0f), s=(%.2f,%.2f), a=%.3f",
+                       gencnt,
+                       -100.0f*pop[0].distance/(known->pois.size()+alien->pois.size())/(alien->raw->getWidth()+alien->raw->getHeight()), 
+                       pop[0].fitness,
                        pop[0].dx(),pop[0].dy(),pop[0].sx(),pop[0].sy(),pop[0].alfa()/M_PI*180.0);
-
 
         int survivors = cfgSurvivalRate * pop.size();
         for(int i=survivors; i<(int)pop.size(); i++)
@@ -661,7 +666,11 @@ int main(int argc, char *argv[])
     
     Image knownImg = Image::readPGM(argv[1]),
           alienImg = Image::readPGM(argv[2]);
-
+          
+    Image diff = renderGaussianDifference(knownImg, alienImg, 2.0f, 2, false);
+    diff.writePGM("foo.pgm");
+    return 2;
+          
     Data knownDat = Data::build(argv[1]),
          alienDat = Data::build(argv[2]);
 
