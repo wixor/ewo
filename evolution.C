@@ -137,7 +137,7 @@ public:
     Image *raw;
     std::vector<POI> pois;
     int originX, originY; /* median of POIs */
-    /* + more to come (handle for opengl images compositing) */
+    CairoImage compimg; /* image for compositing */
 
     static Data build(const char *filename);
 
@@ -155,6 +155,8 @@ Data Data::build(const char *filename)
         ret.findOrigin();
         ret.writeCache(filename);
     }
+
+    Composite::prepare(*ret.raw, &ret.compimg);
 
     return ret;
 }
@@ -284,6 +286,8 @@ class Agent
 public:
     Matrix33 M; /* the transformation matrix */
     float distance; /* point cloud distance */ 
+    float difference; /* image difference metric */
+    float target; /* target function, computed from the above */
     float fitness; /* population-wide fitness factor */
 
     /* agents ordering */
@@ -346,7 +350,7 @@ class Population
     {
     public:
         Population *uplink;
-        int from, to;
+        Agent *agent;
         virtual ~EvaluationJob();
         virtual void run();
     };
@@ -383,43 +387,43 @@ static float matchPOIs(const std::vector<POI> &a, const std::vector<POI> &b)
 }
 void Population::EvaluationJob::run()
 {
-    const Data *known = uplink->known,
-               *alien = uplink->alien;
+    const Data *alien = uplink->alien, *known = uplink->known;
 
-    for(int i=from; i<to; i++)
-    {
-        Agent *a = &uplink->pop[i];
-        std::vector<POI> xformed = known->transformPOIs(a->M);
-        a->distance = -matchPOIs(xformed, alien->pois)
+    std::vector<POI> xformed = known->transformPOIs(agent->M);
+    agent->distance = -matchPOIs(xformed, alien->pois)
                       -matchPOIs(alien->pois, xformed);
-    }
+    agent->distance /= alien->pois.size() + known->pois.size();
+
+    agent->difference = 0;//-Composite::difference(known->compimg, *alien->raw, agent->M);
+    
+    agent->target = agent->distance;
 }
 void Population::evaluate()
 {
-    const int jobSlice = 200;
-    int nJobs = (pop.size() + jobSlice - 1) / jobSlice;
-    EvaluationJob jobs[nJobs];
+    EvaluationJob jobs[pop.size()];
     Completion c;
     
-    for(int i=0; i<nJobs; i++) {
+    for(int i=0; i<(int)pop.size(); i++) {
         jobs[i].completion = &c;
-        jobs[i].from = jobSlice*i;
-        jobs[i].to = std::min(jobSlice*(i+1), (int)pop.size());
+        jobs[i].agent = &pop[i];
         jobs[i].uplink = this;
         aq->queue(&jobs[i]);
     }
 
     c.wait();
 
-    float minDistance = 1e+30;
+    float minTarget = 1e+30;
     for(int i=0; i<(int)pop.size(); i++)
-        minDistance = std::min(minDistance, pop[i].distance);
+        minTarget = std::min(minTarget, pop[i].target);
+
     float denominator = 0;
     for(int i=0; i<(int)pop.size(); i++)
-        denominator += pop[i].distance - minDistance;
+        denominator += pop[i].target - minTarget;
     assert(denominator > 1e-5);
+    denominator = 1.f/denominator;
+
     for(int i=0; i<(int)pop.size(); i++)
-        pop[i].fitness = (pop[i].distance - minDistance) / denominator;
+        pop[i].fitness = (pop[i].target - minTarget) * denominator;
 
     std::sort(pop.begin(), pop.end());
 }
@@ -487,7 +491,7 @@ void Population::mutation(Agent *a)
 /* --- differential evolution mating */
 void Population::deMating(Agent *a, const Agent *p, const Agent *q, const Agent *r)
 {
-    float factor = Random::gaussian(cfgDEMatingCoeff, cfgDEMatingDev);
+    float factor = fabs(Random::gaussian(cfgDEMatingCoeff, cfgDEMatingDev));
     if(q->fitness < r->fitness) std::swap(q,r);
     a->M = p->M + (q->M - r->M) * factor;
 }
@@ -513,24 +517,27 @@ void Population::evolve()
 
     diffIm.bind();
 
-    for(;;)
+    for(int gencnt=1;;gencnt++)
     {
         evaluate();
 
         {
             best.update(renderPOIs(known->transformPOIs(pop[0].M),
                                    alien->raw->getWidth(), alien->raw->getHeight()));
-            best.recaption("best fit: dist %.2f, fitness %f\nd=(%.0f,%.0f), s=(%.2f,%.2f), a=%.3f",
-                           pop[0].distance, pop[0].fitness,
-                           pop[0].dx(),pop[0].dy(),pop[0].sx(),pop[0].sy(),pop[0].alfa()/M_PI*180.0);
+            diffIm.recaption("gen: %d, best fit: dist %.2f, diff %.2f, target %.2f fitness %f\nd=(%.0f,%.0f), s=(%.2f,%.2f), a=%.3f",
+                             gencnt,
+                             pop[0].distance, pop[0].difference, pop[0].target, pop[0].fitness,
+                             pop[0].dx(),pop[0].dy(),pop[0].sx(),pop[0].sy(),pop[0].alfa()/M_PI*180.0);
 
             CairoImage *bestImCanvas = bestIm.getCanvas();
-            Composite::transform(*known->raw, pop[0].M, bestImCanvas);
+            Composite::transform(known->compimg, pop[0].M, bestImCanvas);
             bestIm.putCanvas();
             
             CairoImage *diffImCanvas = diffIm.getCanvas();
-            Composite::difference(*known->raw, *alien->raw, pop[0].M, diffImCanvas);
+            Composite::difference(known->compimg, *alien->raw, pop[0].M, diffImCanvas);
             diffIm.putCanvas();
+
+            printf("%f\n", pop[0].target);
         }
 
         int survivors = cfgSurvivalRate * pop.size();
