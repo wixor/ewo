@@ -729,8 +729,8 @@ int main(int argc, char *argv[])
         return 1;
     }
     
-    Database DTB("evolution.database", argv[2]);
-    Result res = DTB.query(argv[1], argv[2]);
+    Database DTB("evolution.database", (argc == 2 ? NULL : argv[2]));
+    Result res = DTB.query(argv[1], (argc == 2 ? NULL : argv[2]));
     
     
     printf("\n\n *** RESULT *** \n\n");
