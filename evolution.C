@@ -345,6 +345,18 @@ void Agent::scale(float sx, float sy, float ox, float oy) {
 
 /* ------------------------------------------------------------------------ */
 
+/* those are created statically, however they will only initialize
+ * themselves upon first action, which must occur after gtk_gui_init. */
+
+static DisplaySlot knownImgDS("known image"), alienImgDS("alien image"),
+                   knownPOIsDS("known POIs"), alienPOIsDS("alien POIs");
+
+static DisplaySlot best("best fit (POIs)"),
+                   bestIm("best fit (image)"),
+                   diffIm("best fit (difference)");
+
+/* ------------------------------------------------------------------------ */
+
 class Population
 {
     /* we're trying to match the Known image to the Alien image */
@@ -534,18 +546,11 @@ Agent Population::evolve()
     for(int i=0; i<(int)pop.size(); i++)
         makeRandom(&pop[i]);
 
-    DisplaySlot best("best fit (POIs)");
-
-    DisplaySlot bestIm("best fit (image)");
-    { CairoImage *bestImCanvas = bestIm.getCanvas();
-      bestImCanvas->resize(alien->raw->getWidth(), alien->raw->getHeight());
-      bestIm.putCanvas(); }
+    knownImgDS.update(*known->raw);
+    alienImgDS.update(*alien->raw);
+    knownPOIsDS.update(renderPOIs(known->pois, known->raw->getWidth(), known->raw->getHeight()));
+    alienPOIsDS.update(renderPOIs(alien->pois, alien->raw->getWidth(), alien->raw->getHeight()));
     
-    DisplaySlot diffIm("best fit (difference)");
-    { CairoImage *diffImCanvas = diffIm.getCanvas();
-      diffImCanvas->resize(alien->raw->getWidth(), alien->raw->getHeight());
-      diffIm.putCanvas(); }
-
     diffIm.bind();
     std::vector<float> bestValues;
     
@@ -564,6 +569,7 @@ Agent Population::evolve()
                              pop[0].dx(),pop[0].dy(),pop[0].sx(),pop[0].sy(),pop[0].alfa()/M_PI*180.0);
 
             CairoImage *bestImCanvas = bestIm.getCanvas();
+              bestImCanvas->resize(alien->raw->getWidth(), alien->raw->getHeight());
             Composite::transform(known->compimg, pop[0].M, bestImCanvas);
             bestIm.putCanvas();
             
@@ -729,14 +735,6 @@ int main(int argc, char *argv[])
           
     Data knownDat = Data::build(argv[1]),
          alienDat = Data::build(argv[2]);
-
-    DisplaySlot knownImgDS("known image"), alienImgDS("alien image"),
-                knownPOIsDS("known POIs"), alienPOIsDS("alien POIs");
-
-    knownImgDS.update(*knownDat.raw);
-    alienImgDS.update(*alienDat.raw);
-    knownPOIsDS.update(renderPOIs(knownDat.pois, knownImg.getWidth(), knownImg.getHeight()));
-    alienPOIsDS.update(renderPOIs(alienDat.pois, alienImg.getWidth(), alienImg.getHeight()));
 
     Agent A = Population(&knownDat, &alienDat).evolve();
     

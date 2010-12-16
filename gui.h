@@ -8,9 +8,11 @@
 class DisplaySlot : private displayslot
 {
     class CairoImage img;
+    bool active;
 
     inline void sendEvent(int ev);
     inline void sendEventSync(int ev);
+    void activate();
 
 public:
     DisplaySlot(const char *initname);

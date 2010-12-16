@@ -224,12 +224,18 @@ static gboolean efd_readable(GIOChannel *chan, GIOCondition cond, gpointer data)
                 if(areas[i].slot == ds)
                     displayarea_update(&areas[i]);
 
-        if(ds->events & DS_BIND)
+        if(ds->events & DS_BIND) {
+            int bound = FALSE;
             for(int i=0; i<4; i++)
-                if(areas[i].slot == NULL) {
-                    displayarea_set_slot(&areas[i], ds);
-                    break;
-                }
+                bound = bound || (areas[i].slot == ds);
+            if(!bound)
+                for(int i=0; i<4; i++)
+                    if(areas[i].slot == NULL) {
+                        displayarea_set_slot(&areas[i], ds);
+                        break;
+                    }
+        }
+
         if(ds->events & DS_UNBIND)
             for(int i=0; i<4; i++)
                 if(areas[i].slot == ds)
@@ -374,7 +380,9 @@ static void *gui_thread(void *args_)
     
     gtk_main();
 
-    exit(0);
+    _exit(0); /* ugly. this is because globally-allocated displayslots will want to
+                 de-degister themselves upon exit(), and since we won't be running
+                 any more, they'll hang up. */
 }
 
 void gui_gtk_init(int *argc, char ***argv)
