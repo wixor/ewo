@@ -500,13 +500,19 @@ void Population::mutation(Agent *a)
                  Random::gaussian(known->originY, cfgOriginDev * h));
 
     if(Random::maybe(cfgFlipProp))
-        a->scale(-1, 1,
-                 Random::gaussian(known->originX, cfgOriginDev * w),
-                 Random::gaussian(known->originY, cfgOriginDev * h));
-    if(Random::maybe(cfgFlipProp))
+    {
+        float rangle = Random::gaussian(0, cfgRotateDev),
+              rx = Random::gaussian(known->originX, cfgOriginDev*w),
+              ry = Random::gaussian(known->originY, cfgOriginDev*h);
+        
+        a->rotate(rangle, rx, ry);
+        a->scale(-1, 1, rx, ry);
+        a->rotate(-rangle, rx, ry);
+    }
+    /*if(Random::maybe(cfgFlipProp))
         a->scale(1, -1,
                  Random::gaussian(known->originX, cfgOriginDev * w),
-                 Random::gaussian(known->originY, cfgOriginDev * h));
+                 Random::gaussian(known->originY, cfgOriginDev * h));*/
 }
 
 /* --- differential evolution mating */
@@ -600,7 +606,7 @@ Agent Population::evolve()
         if (stopWLOG(bestValues) || gencnt >= cfgMaxGeneration) break;
     }
     debug("there's no point going further. stopping\n");
-    // while (true) ;
+    debug("best score was %.6f\n", bestEver.target);
     return bestEver;
 }
 
@@ -718,7 +724,7 @@ int main(int argc, char *argv[])
     
     gui_gtk_init(&argc, &argv); /* always before looking argc, argv */
 
-    if (argc != 3) {
+    if (argc != 2 && argc != 3) {
         fprintf(stderr, "usage: [input: alien] [category]\n");
         return 1;
     }
@@ -726,6 +732,8 @@ int main(int argc, char *argv[])
     Database DTB("evolution.database", argv[2]);
     Result res = DTB.query(argv[1], argv[2]);
     
+    
+    printf("\n\n *** RESULT *** \n\n");
     for (int i=0; i<res.ile; i++)
         printf("%s, %s (%f)\n", res.tab[i]->name, res.tab[i]->category, res.value[i]);
     
@@ -746,3 +754,10 @@ int main(int argc, char *argv[])
     return 0;
 }
 
+/* prague:
+eight, digits_text (-11.086623)
+pineapple, fruits (-11.507683)
+sex, 3letters (-11.587236)
+nine, digits_text (-11.823596)
+six, digits_text (-12.333274)
+ */
