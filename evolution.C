@@ -137,7 +137,7 @@ class Data
 
 public:
     char name[64];
-    char cathegory[64];
+    char category[64];
     Image *raw;
     std::vector<POI> pois;
     int originX, originY; /* median of POIs */
@@ -622,7 +622,7 @@ class Database
 public:
     inline int size() const { return datable.size(); }
     inline Database(const char* filename) { init(filename); }
-    Result query(const char* filename, const char* cath = NULL) /* taki nasz "main" */
+    Result query(const char* filename, const char* cat = NULL) /* taki nasz "main" */
     {
         Image alienImg = Image::readPGM(filename);
         Data alienDat = Data::build(filename);
@@ -630,7 +630,7 @@ public:
         std::vector< std::pair<Data*,Agent> > similars;
         for (int i=0; i<size(); i++)
         {
-            if (cath != NULL && strcmp(datable[i].cathegory,cath) != 0) continue;
+            if (cat != NULL && strcmp(datable[i].category,cat) != 0) continue;
             Agent A = Population(&datable[i], &alienDat).evolve();
             similars.push_back(std::make_pair(&datable[i], A));
         }
@@ -649,7 +649,7 @@ public:
 void Database::init(const char* filename)
 {
     linereader lrd(filename);
-    char cath[64];
+    char cat[64];
     char path[256];
     char name[64];
     while (lrd.getline())
@@ -659,12 +659,12 @@ void Database::init(const char* filename)
         if (begin[0] == ':' && begin[1] == ':') 
         {
             begin ++; begin ++;
-            char *put = cath;
+            char *put = cat;
             while (isspace(*begin)) begin ++;
             for (char *read = begin; read != end && !isspace(*read); read ++) *(put++) = *read;
             *put = '\0';
-            /* changes current cathegory only */
-            debug("now current cathegory is %s\n", cath);
+            /* changes current category only */
+            debug("now current category is %s\n", cat);
         }
         else
         {
@@ -687,11 +687,11 @@ void Database::init(const char* filename)
                 continue;
             }
             /* now initialize data */
-            debug("bulding image from %s, its name is %s, cathegory %s\n", path, name, cath);
+            debug("bulding image from %s, its name is %s, category %s\n", path, name, cat);
             
             datable.push_back(Data::build(path));
             strcpy(datable.back().name, name);
-            strcpy(datable.back().cathegory, cath);
+            strcpy(datable.back().category, cat);
         }
     }
 }
@@ -708,7 +708,7 @@ int main(int argc, char *argv[])
     gui_gtk_init(&argc, &argv); /* always before looking argc, argv */
 
     if (argc != 3) {
-        fprintf(stderr, "usage: [input: alien] [cathegory]\n");
+        fprintf(stderr, "usage: [input: alien] [category]\n");
         return 1;
     }
     
@@ -716,7 +716,7 @@ int main(int argc, char *argv[])
     Result res = DTB.query(argv[1], argv[2]);
     
     for (int i=0; i<res.ile; i++)
-        printf("%s, %s (%f)\n", res.tab[i]->name, res.tab[i]->cathegory, res.value[i]);
+        printf("%s, %s (%f)\n", res.tab[i]->name, res.tab[i]->category, res.value[i]);
     
     return 0;
     
