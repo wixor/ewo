@@ -136,6 +136,8 @@ class Data
     inline Data() { }
 
 public:
+    char name[64];
+    char cathegory[64];
     Image *raw;
     std::vector<POI> pois;
     int originX, originY; /* median of POIs */
@@ -153,13 +155,17 @@ Data Data::build(const char *filename)
     (*ret.raw) = Image::readPGM(filename);
 
     if(!ret.readCached(filename)) {
+        debug("...finding POIs\n");
         ret.findPOIs();
+        debug("...finding origin\n");
         ret.findOrigin();
+        debug("...writing cache\n");
         ret.writeCache(filename);
     }
-
+    debug("preparing composite\n");
     Composite::prepare(*ret.raw, &ret.compimg);
 
+    debug("done\n");
     return ret;
 }
 
@@ -365,10 +371,11 @@ class Population
     inline void makeRandom(Agent *a);
     inline void mutation(Agent *a);
     inline void deMating(Agent *a, const Agent *p, const Agent *q, const Agent *r);
+    inline static float stopWLOG(const std::vector<float>& v);
 
 public:
     Population(const Data *known, const Data *alien);
-    void evolve();
+    Agent evolve();
 };
 
 /* --- population evaluation */
@@ -500,8 +507,28 @@ void Population::deMating(Agent *a, const Agent *p, const Agent *q, const Agent 
     a->M = p->M + (q->M - r->M) * factor;
 }
 
+float Population::stopWLOG(const std::vector<float>& v)
+{
+    const int param = 40;
+    if (v.size() < 2*param) return 0.0f;
+    /* jesli przez ostatnie 50 pokolen nie stalo sie nic ciekawszego niz podczas poprzednich 50 */
+    float min1 = 1e10f, min2 = 1e10f;
+    
+    for (int i=v.size()-1; i>=(int)(v.size()-param); i--)
+        min1 = std::min(min1, -v[i]);
+    
+    for (int i=v.size()-param-1; i >= 0 && i>=(int)(v.size()-2*param); i--)
+        min2 = std::min(min2, -v[i]);
+    
+    // debug("  last 50: %f, not-so-last 50: %f\n", min1, min2);
+    if (min1 == min2) return min1;
+    if (min1 < min2) return 0.0f;
+    if (min1 > min2) { debug("warning: unstable evolution convergence!\n"); return 0.0f; }
+    return min1;
+}
+    
 /* --- the so called main loop */
-void Population::evolve()
+Agent Population::evolve()
 {
     pop.resize(cfgPopulationSize);
     for(int i=0; i<(int)pop.size(); i++)
@@ -520,7 +547,10 @@ void Population::evolve()
       diffIm.putCanvas(); }
 
     diffIm.bind();
-
+    std::vector<float> bestValues;
+    
+    Agent bestEver;
+    bestEver.target = -1000000.0f;
     for(int gencnt=1;;gencnt++)
     {
         evaluate();
@@ -541,9 +571,12 @@ void Population::evolve()
             Composite::difference(known->compimg, *alien->raw, pop[0].M, diffImCanvas);
             diffIm.putCanvas();
 
-            printf("%f\n", pop[0].target);
+            if (gencnt % 20 == 0) debug("%d %f\n", gencnt, pop[0].target);
         }
-
+        bestValues.push_back(pop[0].target);
+        if (bestEver.target < pop[0].target)
+            bestEver = pop[0];
+        
         int survivors = cfgSurvivalRate * pop.size();
         for(int i=survivors; i<(int)pop.size(); i++)
             if(Random::maybe(cfgDEMatingProp))
@@ -558,7 +591,13 @@ void Population::evolve()
 
         for(int i=0; i<(int)pop.size(); i++)
             mutation(&pop[i]);
+        
+        float minstop = stopWLOG(bestValues);
+        if (minstop != 0.0f || gencnt >= 300) break;
     }
+    debug("there's no point going further. stopping\n");
+    // while (true) ;
+    return bestEver;
 }
 
 Population::Population(const Data *known, const Data *alien)
@@ -567,6 +606,97 @@ Population::Population(const Data *known, const Data *alien)
     this->alien = alien;
 }
 
+struct Result 
+{
+    static const int ILE = 5;
+    int ile;
+    Data* tab[ILE];
+    float value[ILE];
+};
+
+inline static bool fooCompare(std::pair<Data*,Agent> p1, std::pair<Data*,Agent> p2) { return p1.second.target > p2.second.target; }
+class Database
+{
+    std::vector<Data> datable;
+    void init(const char* filename);
+public:
+    inline int size() const { return datable.size(); }
+    inline Database(const char* filename) { init(filename); }
+    Result query(const char* filename, const char* cath = NULL) /* taki nasz "main" */
+    {
+        Image alienImg = Image::readPGM(filename);
+        Data alienDat = Data::build(filename);
+        
+        std::vector< std::pair<Data*,Agent> > similars;
+        for (int i=0; i<size(); i++)
+        {
+            if (cath != NULL && strcmp(datable[i].cathegory,cath) != 0) continue;
+            Agent A = Population(&datable[i], &alienDat).evolve();
+            similars.push_back(std::make_pair(&datable[i], A));
+        }
+        
+        sort(similars.begin(), similars.end(), fooCompare);
+        Result ret;
+        
+        for (ret.ile=0; ret.ile<Result::ILE && ret.ile<similars.size(); ret.ile++)
+            ret.tab[ret.ile] = similars[ret.ile].first,
+            ret.value[ret.ile] = similars[ret.ile].second.target;
+        
+        return ret;
+    }   
+};
+
+void Database::init(const char* filename)
+{
+    linereader lrd(filename);
+    char cath[64];
+    char path[256];
+    char name[64];
+    while (lrd.getline())
+    {
+        char *begin = lrd.buffer, *end = lrd.buffer+lrd.line_len;
+        if (*begin == '#') continue;
+        if (begin[0] == ':' && begin[1] == ':') 
+        {
+            begin ++; begin ++;
+            char *put = cath;
+            while (isspace(*begin)) begin ++;
+            for (char *read = begin; read != end && !isspace(*read); read ++) *(put++) = *read;
+            *put = '\0';
+            /* changes current cathegory only */
+            debug("now current cathegory is %s\n", cath);
+        }
+        else
+        {
+            char *read = begin;
+            /* path */
+            char *put = path;
+            while (isspace(*read)) read ++;
+            for(; read != end; read++)
+                if (isspace(*read) && read[-1] != '\\') break; //file names may contain whitespaces, preceded by backslash
+                else *(put++) = *read;
+            *put = '\0';
+            /* name */
+            put = name;
+            while (isspace(*read)) read ++;
+            for (; read != end && *read != '\n'; read ++) *(put++) = *read;
+            *put = '\0';
+            
+            if (strlen(name) == 0 || strlen(path) == 0) {
+                debug("empty name or path\n");
+                continue;
+            }
+            /* now initialize data */
+            debug("bulding image from %s, its name is %s, cathegory %s\n", path, name, cath);
+            
+            datable.push_back(Data::build(path));
+            strcpy(datable.back().name, name);
+            strcpy(datable.back().cathegory, cath);
+        }
+    }
+}
+
+
 /* ------------------------------------------------------------------------ */
 
 int main(int argc, char *argv[])
@@ -574,19 +704,28 @@ int main(int argc, char *argv[])
     srand(time(0));
     parse_config("evolution.cfg", cfgvars);
     spawn_worker_threads(cfgThreads); /* should detect no. of cpus available */
+    
     gui_gtk_init(&argc, &argv); /* always before looking argc, argv */
 
     if (argc != 3) {
-        fprintf(stderr, "usage: [input: known] [input: alien]\n");
+        fprintf(stderr, "usage: [input: alien] [cathegory]\n");
         return 1;
     }
+    
+    Database DTB("evolution.database");
+    Result res = DTB.query(argv[1], argv[2]);
+    
+    for (int i=0; i<res.ile; i++)
+        printf("%s, %s (%f)\n", res.tab[i]->name, res.tab[i]->cathegory, res.value[i]);
+    
+    return 0;
     
     Image knownImg = Image::readPGM(argv[1]),
           alienImg = Image::readPGM(argv[2]);
           
-    Image diff = renderGaussianDifference(knownImg, alienImg, 2.0f, 2, false);
+/*    Image diff = renderGaussianDifference(knownImg, alienImg, 2.0f, 2, false);
     diff.writePGM("foo.pgm");
-    return 2;
+    return 2; */
           
     Data knownDat = Data::build(argv[1]),
          alienDat = Data::build(argv[2]);
@@ -599,7 +738,7 @@ int main(int argc, char *argv[])
     knownPOIsDS.update(renderPOIs(knownDat.pois, knownImg.getWidth(), knownImg.getHeight()));
     alienPOIsDS.update(renderPOIs(alienDat.pois, alienImg.getWidth(), alienImg.getHeight()));
 
-    Population(&knownDat, &alienDat).evolve();
+    Agent A = Population(&knownDat, &alienDat).evolve();
     
     return 0;
 }
