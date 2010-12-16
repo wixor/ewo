@@ -211,6 +211,7 @@ static gboolean efd_readable(GIOChannel *chan, GIOCondition cond, gpointer data)
 
     pthread_mutex_lock(&statusbar_lock);
     if(statusbar_msg) {
+        gtk_statusbar_pop(statusbar, statusbar_ctx);
         gtk_statusbar_push(statusbar, statusbar_ctx, statusbar_msg);
         free(statusbar_msg);
         statusbar_msg = NULL;
