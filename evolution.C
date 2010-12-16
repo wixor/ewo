@@ -30,7 +30,7 @@ static float cfgPOITabuParam;
 static int cfgPOICount;
 static int cfgPopulationSize;
 static float cfgSurvivalRate;
-static int cfgStopCondParam;
+static int cfgStopCondParam, cfgMaxGeneration;
 static float cfgTranslateInit, cfgRotateInit, cfgScaleInit;
 static float cfgTranslateProp, cfgRotateProp, cfgScaleProp, cfgFlipProp;
 static float cfgTranslateDev, cfgRotateDev, cfgScaleDev;
@@ -49,6 +49,7 @@ static struct config_var cfgvars[] = {
     { "populationSize", config_var::INT,       &cfgPopulationSize },
     { "survivalRate",   config_var::FLOAT,     &cfgSurvivalRate },
     { "stopCondParam",  config_var::INT,       &cfgStopCondParam },
+    { "maxGeneration",  config_var::INT,       &cfgMaxGeneration },
     /* initial population generation parameters */
     { "translateInit",  config_var::FLOAT,     &cfgTranslateInit },
     { "rotateInit",     config_var::FLOAT,     &cfgRotateInit },
@@ -596,7 +597,7 @@ Agent Population::evolve()
         for(int i=0; i<(int)pop.size(); i++)
             mutation(&pop[i]);
         
-        if (stopWLOG(bestValues) || gencnt >= 300) break;
+        if (stopWLOG(bestValues) || gencnt >= cfgMaxGeneration) break;
     }
     debug("there's no point going further. stopping\n");
     // while (true) ;
@@ -621,10 +622,10 @@ inline static bool fooCompare(std::pair<Data*,Agent> p1, std::pair<Data*,Agent> 
 class Database
 {
     std::vector<Data> datable;
-    void init(const char* filename);
+    void init(const char* filename, const char* cat);
 public:
     inline int size() const { return datable.size(); }
-    inline Database(const char* filename) { init(filename); }
+    inline Database(const char* filename, const char* cat = NULL) { init(filename, cat); }
     Result query(const char* filename, const char* cat = NULL) /* taki nasz "main" */
     {
         Image alienImg = Image::readPGM(filename);
@@ -650,7 +651,7 @@ public:
     }   
 };
 
-void Database::init(const char* filename)
+void Database::init(const char* filename, const char* onlycat)
 {
     linereader lrd(filename);
     char cat[64];
@@ -691,6 +692,12 @@ void Database::init(const char* filename)
                 continue;
             }
             /* now initialize data */
+            
+            if (onlycat != NULL && strcmp(onlycat, cat)) {
+                debug("we won't build %s now\n", name);
+                continue;
+            }
+            
             debug("bulding image from %s, its name is %s, category %s\n", path, name, cat);
             
             datable.push_back(Data::build(path));
@@ -716,7 +723,7 @@ int main(int argc, char *argv[])
         return 1;
     }
     
-    Database DTB("evolution.database");
+    Database DTB("evolution.database", argv[2]);
     Result res = DTB.query(argv[1], argv[2]);
     
     for (int i=0; i<res.ile; i++)
