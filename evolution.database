@@ -18,22 +18,41 @@ text/three1.pgm three
 text/four1.pgm four
 text/five1.pgm five
 text/six1.pgm six
+text/seven1.pgm seven
+text/eight1.pgm eight
+text/nine1.pgm nine
+text/zero1.pgm zero
+
+::3letters
+text/car1.pgm car
+text/cut1.pgm cut
+text/bra1.pgm bra
+text/sex1.pgm sex
+text/six1.pgm six
+text/jeb1.pgm jeb
+text/map1.pgm map
+text/rap1.pgm rap
+text/two1.pgm two
+text/bar1.pgm bar
+text/sut1.pgm sut
 
 ::fruits
 fruits/cherry2.pgm cherry
 fruits/cherries.pgm cherries
 fruits/banana1.pgm banana
-fruits/banana2.pgm banana
 fruits/apple.pgm apple
 fruits/orange1.pgm orange
 fruits/pineapple.pgm pineapple
 fruits/watermelon.pgm watermelon
+fruits/paprika1.pgm paprika
+fruits/pear1.pgm pear
 
 ::geometry
 geom/square.pgm square
 geom/strips4.pgm four_strips
 geom/strips5.pgm five_strips
 geom/dots44_1.pgm sixteen_dots
+geom/star4_1.pgm star4
 
 ::strange
 geom/wtf1.pgm wtf
