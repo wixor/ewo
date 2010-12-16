@@ -501,7 +501,7 @@ void Population::mutation(Agent *a)
 
     if(Random::maybe(cfgFlipProp))
     {
-        float rangle = Random::gaussian(0, cfgRotateDev),
+        float rangle = Random::real(6.28f),
               rx = Random::gaussian(known->originX, cfgOriginDev*w),
               ry = Random::gaussian(known->originY, cfgOriginDev*h);
         
