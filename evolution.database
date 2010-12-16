@@ -1,3 +1,4 @@
+::digits
 digs/1_3.pgm one
 digs/2_3.pgm two
 digs/3_3.pgm three
@@ -8,19 +9,24 @@ digs/7_3.pgm seven
 digs/8_3.pgm eight
 digs/9_3.pgm nine
 
+::fruits
 fruits/cherry2.pgm cherry
 fruits/cherries.pgm cherries
 fruits/banana1.pgm banana
 fruits/banana2.pgm banana
 fruits/apple.pgm apple
-fruits/orange/pgm orange
+fruits/orange1.pgm orange
 fruits/pineapple.pgm pineapple
-fruits/watermelong.pgm watermelong
+fruits/watermelon.pgm watermelon
 
+::geometry
 geom/square.pgm square
 geom/strips4.pgm four_strips
 geom/strips5.pgm five_strips
 geom/dots44_1.pgm sixteen_dots
+
+::strange
+geom/wtf1.pgm wtf
 
 #et caetera
 

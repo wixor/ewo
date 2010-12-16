@@ -166,7 +166,7 @@ public:
         return ret;
     }
 
-    inline Matrix33 inverse() const /* hell, yeah! */
+    inline Matrix33 inverse() const /* hell, yeah! */ /* but.. why? */
     {
         const Matrix33 &M = *this;
         Matrix33 R;
