@@ -37,6 +37,7 @@ struct displayslot
 };
 
 void gui_gtk_poke();
+void gui_gtk_status(const char *fmt, ...);
 void gui_gtk_register(struct displayslot *ds);
 void gui_gtk_unregister(struct displayslot *ds);
 void gui_gtk_init(int *argc, char ***argv);

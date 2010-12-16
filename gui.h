@@ -19,7 +19,7 @@ public:
     ~DisplaySlot();
 
     void rename(const char *fmt, ...);
-    void recaption(const char *fmt, ...);
+//    void recaption(const char *fmt, ...);
     void update(const CairoImage &src);
     void update(const Image &src, bool transparency = false);
     void bind();

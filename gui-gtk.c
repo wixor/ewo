@@ -2,6 +2,7 @@
 
 #include <stdlib.h>
 #include <stdio.h>
+#include <stdarg.h>
 #include <stdint.h>
 #include <string.h>
 #include <pthread.h>
@@ -23,7 +24,7 @@ struct displayarea
         GtkComboBox *slotselect;
         GtkButton *zoomin;
         GtkButton *zoomout;
-      GtkLabel *caption;
+//      GtkLabel *caption;
 
     struct displayslot *slot;
     float scale;
@@ -34,6 +35,14 @@ static struct displayarea areas[4];
 static GList *slots = NULL;
 static GtkListStore *slotsModel;
 static pthread_mutex_t slots_lock;
+
+static pthread_mutex_t statusbar_lock;
+static char *statusbar_msg;
+static int statusbar_ctx;
+
+static GtkToolbar *toolbar;
+static GtkToolButton *single, *hsplit, *vsplit, *quad;
+static GtkStatusbar *statusbar;
 
 /* ------------------------------------------------------------------------- */
 
@@ -110,7 +119,7 @@ static void displayarea_init(struct displayarea *da)
     da->slotselect = GTK_COMBO_BOX(gtk_combo_box_new_with_model(GTK_TREE_MODEL(slotsModel)));
     da->zoomin = GTK_BUTTON(gtk_button_new());
     da->zoomout = GTK_BUTTON(gtk_button_new());
-    da->caption = GTK_LABEL(gtk_label_new(""));
+//    da->caption = GTK_LABEL(gtk_label_new(""));
 
     gtk_button_set_image(da->zoomin,  gtk_image_new_from_stock(GTK_STOCK_ZOOM_IN,  GTK_ICON_SIZE_BUTTON));
     gtk_button_set_image(da->zoomout, gtk_image_new_from_stock(GTK_STOCK_ZOOM_OUT, GTK_ICON_SIZE_BUTTON));
@@ -121,11 +130,11 @@ static void displayarea_init(struct displayarea *da)
         gtk_cell_layout_set_attributes(GTK_CELL_LAYOUT(da->slotselect), crend, "text", 1, NULL);
     }
 
-    gtk_misc_set_alignment(GTK_MISC(da->caption), 0, .5);
+//    gtk_misc_set_alignment(GTK_MISC(da->caption), 0, .5);
 
     gtk_box_pack_start(GTK_BOX(da->root), GTK_WIDGET(da->scrolled_window), TRUE,TRUE,2);
     gtk_box_pack_start(GTK_BOX(da->root), GTK_WIDGET(da->buttbox), FALSE,FALSE,2);
-    gtk_box_pack_start(GTK_BOX(da->root), GTK_WIDGET(da->caption), FALSE,FALSE,2);
+//    gtk_box_pack_start(GTK_BOX(da->root), GTK_WIDGET(da->caption), FALSE,FALSE,2);
 
     gtk_container_add(GTK_CONTAINER(da->scrolled_window), GTK_WIDGET(da->area));
 
@@ -169,9 +178,9 @@ static void displayarea_update(struct displayarea *da)
     gtk_widget_queue_draw(GTK_WIDGET(da->area));
 }
 
-static void displayarea_recaption(struct displayarea *da) {
+/*static void displayarea_recaption(struct displayarea *da) {
     gtk_label_set_text(da->caption, da->slot ? da->slot->caption : "");
-}
+}*/
 
 static void displayarea_set_slot(struct displayarea *da, struct displayslot *ds)
 {
@@ -188,7 +197,7 @@ static void displayarea_set_slot(struct displayarea *da, struct displayslot *ds)
 
     da->slot = ds;
     displayarea_update(da);
-    displayarea_recaption(da);
+//    displayarea_recaption(da);
 }
 
 /* ------------------------------------------------------------------------- */
@@ -199,6 +208,14 @@ static gboolean efd_readable(GIOChannel *chan, GIOCondition cond, gpointer data)
 {
     eventfd_t val;
     eventfd_read(efd, &val);
+
+    pthread_mutex_lock(&statusbar_lock);
+    if(statusbar_msg) {
+        gtk_statusbar_push(statusbar, statusbar_ctx, statusbar_msg);
+        free(statusbar_msg);
+        statusbar_msg = NULL;
+    }
+    pthread_mutex_unlock(&statusbar_lock);
 
     pthread_mutex_lock(&slots_lock);
     for(GList *p = slots; p; p = p->next)
@@ -214,10 +231,10 @@ static gboolean efd_readable(GIOChannel *chan, GIOCondition cond, gpointer data)
         if(ds->events & DS_RENAME)
             gtk_list_store_set(slotsModel, iter, 1,ds->name, -1);
         
-        if(ds->events & DS_RECAPTION)
+/*        if(ds->events & DS_RECAPTION)
             for(int i=0; i<4; i++)
                 if(areas[i].slot == ds)
-                    displayarea_recaption(&areas[i]);
+                    displayarea_recaption(&areas[i]); */
         
         if(ds->events & DS_UPDATE)
             for(int i=0; i<4; i++)
@@ -274,12 +291,22 @@ static const guint8 icoVsplit[] __attribute__ ((__aligned__ (4)));
 static const guint8 icoHsplit[] __attribute__ ((__aligned__ (4)));
 static const guint8 icoQuad[] __attribute__ ((__aligned__ (4)));
 
-static GtkToolbar *toolbar;
-static GtkToolButton *single, *hsplit, *vsplit, *quad;
-
 void gui_gtk_poke(void)
 {
     eventfd_write(efd, 1);
+}
+
+void gui_gtk_status(const char *fmt, ...)
+{
+    va_list args; va_start(args, fmt);
+    char *buf; vasprintf(&buf, fmt, args);
+    va_end(args);
+
+    pthread_mutex_lock(&statusbar_lock);
+    free(statusbar_msg);
+    statusbar_msg = buf;
+    gui_gtk_poke();
+    pthread_mutex_unlock(&statusbar_lock);
 }
 
 void gui_gtk_register(struct displayslot *ds)
@@ -338,6 +365,7 @@ static void *gui_thread(void *args_)
     gtk_init (args->argc, args->argv);
 
     pthread_mutex_init(&slots_lock, NULL);
+    pthread_mutex_init(&statusbar_lock, NULL);
     efd_init();
 
     slotsModel = gtk_list_store_new(4, G_TYPE_POINTER, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_INT);
@@ -351,6 +379,9 @@ static void *gui_thread(void *args_)
     displayarea_init(&areas[1]);
     displayarea_init(&areas[2]);
     displayarea_init(&areas[3]);
+
+    statusbar = GTK_STATUSBAR(gtk_statusbar_new());
+    statusbar_ctx = gtk_statusbar_get_context_id(statusbar,"");
 
     toolbar = GTK_TOOLBAR(gtk_toolbar_new());
     gtk_toolbar_set_style(GTK_TOOLBAR(toolbar), GTK_TOOLBAR_ICONS);
@@ -367,8 +398,9 @@ static void *gui_thread(void *args_)
     gtk_table_attach(GTK_TABLE(table), GTK_WIDGET(areas[3].root), 1,2,1,2,GTK_EXPAND|GTK_FILL,GTK_EXPAND|GTK_FILL,3,3);
     
     GtkWidget *vbox = gtk_vbox_new(0,0);
-    gtk_box_pack_start(GTK_BOX(vbox), GTK_WIDGET(toolbar), FALSE,FALSE,0);
-    gtk_box_pack_start(GTK_BOX(vbox), table,               TRUE, TRUE, 0);
+    gtk_box_pack_start(GTK_BOX(vbox), GTK_WIDGET(toolbar),   FALSE, FALSE,0);
+    gtk_box_pack_start(GTK_BOX(vbox), table,                 TRUE,  TRUE, 0);
+    gtk_box_pack_start(GTK_BOX(vbox), GTK_WIDGET(statusbar), FALSE, FALSE,0);
     gtk_container_add(GTK_CONTAINER(window), vbox);
     
     gtk_widget_show_all(window);

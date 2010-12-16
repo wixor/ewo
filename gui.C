@@ -13,7 +13,7 @@ DisplaySlot::DisplaySlot(const char *initname)
 
     events = 0;
     name = strdup(initname);
-    caption = strdup("");
+    //caption = strdup("");
     active = false;
 
     img.resize(100,100);
@@ -44,7 +44,7 @@ DisplaySlot::~DisplaySlot()
         gui_gtk_unregister(this);
     }
 
-    free(caption);
+//    free(caption);
     free(name);
 
     pthread_cond_destroy(&cond);
@@ -76,7 +76,7 @@ void DisplaySlot::rename(const char *fmt, ...)
     pthread_mutex_unlock(&lock);
 }
 
-void DisplaySlot::recaption(const char *fmt, ...)
+/*void DisplaySlot::recaption(const char *fmt, ...)
 {
     char *buf;
     va_list args;
@@ -90,7 +90,7 @@ void DisplaySlot::recaption(const char *fmt, ...)
     caption = buf;
     sendEvent(DS_RECAPTION);
     pthread_mutex_unlock(&lock);
-}
+}*/
 
 void DisplaySlot::update(const CairoImage &src)
 {
