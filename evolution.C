@@ -30,6 +30,7 @@ static float cfgPOITabuParam;
 static int cfgPOICount;
 static int cfgPopulationSize;
 static float cfgSurvivalRate;
+static int cfgStopCondParam;
 static float cfgTranslateInit, cfgRotateInit, cfgScaleInit;
 static float cfgTranslateProp, cfgRotateProp, cfgScaleProp, cfgFlipProp;
 static float cfgTranslateDev, cfgRotateDev, cfgScaleDev;
@@ -47,6 +48,7 @@ static struct config_var cfgvars[] = {
     /* evolution */
     { "populationSize", config_var::INT,       &cfgPopulationSize },
     { "survivalRate",   config_var::FLOAT,     &cfgSurvivalRate },
+    { "stopCondParam",  config_var::INT,       &cfgStopCondParam },
     /* initial population generation parameters */
     { "translateInit",  config_var::FLOAT,     &cfgTranslateInit },
     { "rotateInit",     config_var::FLOAT,     &cfgRotateInit },
@@ -155,17 +157,12 @@ Data Data::build(const char *filename)
     (*ret.raw) = Image::readPGM(filename);
 
     if(!ret.readCached(filename)) {
-        debug("...finding POIs\n");
         ret.findPOIs();
-        debug("...finding origin\n");
         ret.findOrigin();
-        debug("...writing cache\n");
         ret.writeCache(filename);
     }
-    debug("preparing composite\n");
     Composite::prepare(*ret.raw, &ret.compimg);
 
-    debug("done\n");
     return ret;
 }
 
@@ -383,7 +380,7 @@ class Population
     inline void makeRandom(Agent *a);
     inline void mutation(Agent *a);
     inline void deMating(Agent *a, const Agent *p, const Agent *q, const Agent *r);
-    inline static float stopWLOG(const std::vector<float>& v);
+    inline static bool stopWLOG(const std::vector<float>& v);
 
 public:
     Population(const Data *known, const Data *alien);
@@ -519,10 +516,10 @@ void Population::deMating(Agent *a, const Agent *p, const Agent *q, const Agent 
     a->M = p->M + (q->M - r->M) * factor;
 }
 
-float Population::stopWLOG(const std::vector<float>& v)
+bool Population::stopWLOG(const std::vector<float>& v)
 {
-    const int param = 40;
-    if (v.size() < 2*param) return 0.0f;
+    const int param = cfgStopCondParam;
+    if (v.size() < 2*param) return false;
     /* jesli przez ostatnie 50 pokolen nie stalo sie nic ciekawszego niz podczas poprzednich 50 */
     float min1 = 1e10f, min2 = 1e10f;
     
@@ -533,10 +530,10 @@ float Population::stopWLOG(const std::vector<float>& v)
         min2 = std::min(min2, -v[i]);
     
     // debug("  last 50: %f, not-so-last 50: %f\n", min1, min2);
-    if (min1 == min2) return min1;
-    if (min1 < min2) return 0.0f;
-    if (min1 > min2) { debug("warning: unstable evolution convergence!\n"); return 0.0f; }
-    return min1;
+    if (min1 >= min2) return true;
+    if (min1 < min2) return false;
+    // if (min1 > min2) { debug("warning: unstable evolution convergence!\n"); return 0.0f; }
+    return false;
 }
     
 /* --- the so called main loop */
@@ -599,8 +596,7 @@ Agent Population::evolve()
         for(int i=0; i<(int)pop.size(); i++)
             mutation(&pop[i]);
         
-        float minstop = stopWLOG(bestValues);
-        if (minstop != 0.0f || gencnt >= 300) break;
+        if (stopWLOG(bestValues) || gencnt >= 300) break;
     }
     debug("there's no point going further. stopping\n");
     // while (true) ;
@@ -638,6 +634,7 @@ public:
         for (int i=0; i<size(); i++)
         {
             if (cat != NULL && strcmp(datable[i].category,cat) != 0) continue;
+            debug("okay, start comparing to %s\n", datable[i].name);
             Agent A = Population(&datable[i], &alienDat).evolve();
             similars.push_back(std::make_pair(&datable[i], A));
         }
@@ -645,7 +642,7 @@ public:
         sort(similars.begin(), similars.end(), fooCompare);
         Result ret;
         
-        for (ret.ile=0; ret.ile<Result::ILE && ret.ile<similars.size(); ret.ile++)
+        for (ret.ile=0; ret.ile<Result::ILE && ret.ile<(int)similars.size(); ret.ile++)
             ret.tab[ret.ile] = similars[ret.ile].first,
             ret.value[ret.ile] = similars[ret.ile].second.target;
         
