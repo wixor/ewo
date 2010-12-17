@@ -564,14 +564,14 @@ Agent Population::evolve()
     {
         evaluate();
 
-        {
+		gui_gtk_status("gen: %d, best fit: dist %.2f, diff %.2f, target %.2f fitness %f  |  d=(%.0f,%.0f), s=(%.2f,%.2f), a=%.3f",
+					   gencnt,
+					   pop[0].distance, pop[0].difference, pop[0].target, pop[0].fitness,
+					   pop[0].dx(),pop[0].dy(),pop[0].sx(),pop[0].sy(),pop[0].alfa()/M_PI*180.0);
+
+        if(gencnt%10 == 0) {
             best.update(renderPOIs(known->transformPOIs(pop[0].M),
                                    alien->raw->getWidth(), alien->raw->getHeight()));
-
-            gui_gtk_status("gen: %d, best fit: dist %.2f, diff %.2f, target %.2f fitness %f  |  d=(%.0f,%.0f), s=(%.2f,%.2f), a=%.3f",
-                           gencnt,
-                           pop[0].distance, pop[0].difference, pop[0].target, pop[0].fitness,
-                           pop[0].dx(),pop[0].dy(),pop[0].sx(),pop[0].sy(),pop[0].alfa()/M_PI*180.0);
 
             CairoImage *bestImCanvas = bestIm.getCanvas();
               bestImCanvas->resize(alien->raw->getWidth(), alien->raw->getHeight());
