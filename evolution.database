@@ -54,6 +54,9 @@ geom/strips5.pgm five_strips
 geom/dots44_1.pgm sixteen_dots
 geom/star4_1.pgm star4
 
+::square
+geom/square.pgm square
+
 ::strange
 geom/wtf1.pgm wtf
 
