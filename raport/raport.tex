@@ -166,17 +166,18 @@ normalnym. Dzięki temu mutacje te z dużym prawdopodobieństem tylko delikatnie
 jednostajnym). Z drugiej strony kąt prostej wybieranej podczas mutacji \texttt{flip} losowany jest z rozkładem jednostajnym. Mutacja ta
 jest bardzo ,,destrukcyjna'' (osobnik tuż po mutacji prawie na pewno będzie miał bardzo niską wartość funkcji celu) i ma na celu
 przeszukanie przestrzeni rozwiązań (warto zauważyć, że odbicie względem prostej nie daje się uzyskać w wyniku pozostałych trzech mutacji).
-Również podczas inicjalizacja populacji używane jest losowanie z rozkładem jednostajnym, gdyż na tym etapie nie dysponujemy żadnymi
+Również podczas inicjalizacji populacji używane jest losowanie z rozkładem jednostajnym, gdyż na tym etapie nie dysponujemy żadnymi
 rozwiązaniami, które możnaby poprawić -- staramy się zatem równomiernie próbkować całą przestrzeń rozwiązań.
 
-Ważną obserwacją jest, że nie warto dokonywać losowych skalowań, czy obrotów wokół punktu $(0,0)$, gdyż to spowoduje duże
-zmiany w położeniu punktów oddalonych od środka układu współrzędnych (czyli lewego górnego rogu). Aby tego uniknąć, obroty i skalowania wykonujemy
-względem punktu wybranego z małego otoczenia punktu $(\median(\bar X), \median(\bar Y))$, gdzie $\bar X, \bar Y$ są zbiorami współrzędnych x, y
+Ważną obserwacją jest, że nie warto dokonywać losowych skalowań, czy obrotów wokół punktu $(0,0)$, gdyż spowoduje to duże zmiany w
+położeniu punktów oddalonych od środka układu współrzędnych (czyli lewego górnego rogu). Aby tego uniknąć, obroty i skalowania wykonujemy
+względem punktu wybranego z okolic punktu $(\median(\bar X), \median(\bar Y))$, gdzie $\bar X, \bar Y$ są zbiorami współrzędnych x, y
 punktów charakterystycznych.
 
 \paragraph{Parametry algorytmu}
-Działanie algorytmu jest uzależnione od wielu parametrów. Wszystkie one zostały wyodrębnione z kodu programu. Ich wartości są następujące:
-
+Działanie algorytmu jest uzależnione od wielu parametrów. Wszystkie one zostały wyodrębnione z kodu programu.
+Ich wartości są następujące:\\[1em]
+\begin{minipage}{\textwidth}\centering
 \begin{tabular}{l|l|l}
 parametr                & wartość & znaczenie \\
 \hline
@@ -204,12 +205,13 @@ parametr                & wartość & znaczenie \\
 \texttt{translateDev}   & .5    & odchylenie w losowaniu translacji (w mutacji) \\
 \texttt{rotateDev}      & .05   & odchylenie w losowaniu obrotu (w mutacji) \\
 \texttt{scaleDev}       & .05   & odchylenie w losowaniu skalowania (w mutacji) \\
-\texttt{originDev}      & 0.3   & rozrzut przy wyborze punktu srodka obrotu i skali \\
+\texttt{originDev}      & 0.3   & rozrzut przy wyborze punktu środka obrotu i skali \\
 \hline
 \texttt{deMatingProp}   & 0.8   & prawdop. krzyżowania \\
 \texttt{deMatingCoeff}  & 0.1   & współczynnik w krzyżowaniu \\
 \texttt{deMatingDev}    & 0.05  & rozrzut powyższego \\
 \end{tabular}
+\end{minipage}
 
 \section{Eksperymenty}
 
@@ -239,8 +241,8 @@ obrazka z zapytania od jabłka z bazy jest niewielka, istotnie mniejsza niż poz
 
 \subsection{Dopasowanie wisienek}
 Dość trudny test. Zapytanie to podwójne wisienki, bardzo podobne do podwójnych wisienek z bazy, jednak posiadające dodatkowo listek na ogonku. 
-Obecność listka znacznie zaburza rozkład punktów charakterystycznych, jednak, co powoduje, że podobieństwo obrazków jest nietrywialne. 
-Oczekiwanym wynikiem jest jednak wciąż najlepsze dopasowanie dla wisienek. Oto wynik działania algorytmu:
+Obecność listka znacznie zaburza rozkład punktów charakterystycznych, co powoduje, że podobieństwo obrazków jest nietrywialne. Oczekiwanym
+wynikiem jest jednak wciąż najlepsze dopasowanie dla wisienek. Oto wynik działania algorytmu:
 \begin{verbatim}
 cherries, fruits (-12.547963)
 banana, fruits (-14.550430)
@@ -256,7 +258,7 @@ niebieskimi punktami -- wisienek z zapytania (z listkiem).
 
 \paragraph{Gruszka}
 W tym eksperymencie będziemy porównywać zdjęcie gruszki do bazy owoców. Oczywiście, oczekujemy, że najbliższym owocem okaże się także gruszka.
-Ten eksperyment jest prosty, gdyż gruszki są do siebie podobne. Wynikin, jak widać, są zgodne z oczekiwaniami. Co więcej, całkiem dobrze do
+Ten eksperyment jest prosty, gdyż gruszki są do siebie podobne. Wyniki, jak widać, są zgodne z oczekiwaniami. Co więcej, całkiem dobrze do
 gruszki dopasowała się papryka. Dopasowania te przedstawiają rysunki \ref{pear} oraz \ref{paprika}.
 \begin{verbatim}
 pear, fruits (-16.697315)
@@ -268,7 +270,7 @@ watermelon, fruits (-23.120878)
 
 \paragraph{Ananas}
 Bardzo ciekawym eksperymentem okazało się wyszukiwanie ananasa. Kształt ananasa jest bardzo charakterystyczny i powoduje powstanie bardzo
-dobrze rozłożonych punktów charakterystycznych, szczególnie w obszarze korony. Jednak kształt ten jest też bardzo nieregularny, i choć
+dobrze rozłożonych punktów charakterystycznych, szczególnie w obszarze korony. Jednak kształt ten jest też bardzo nieregularny i, choć
 ,,na oko'' ananasy są do siebie podobne, punkty charakterystyczne dwóch różnych zdjęć mogą się bardzo istotnie różnić. Z drugiej strony,
 w bazie danych nie znajduje się żaden owoc choć trochę podobny do ananasa (nie będący ananasem), zatem są nadzieje, że eksperyment powiedzie
 się. Otrzymane wyniki pokazują, że istotnie najlepsze dopasowanie otrzymano dla ananasa, jednak odległość do kolejnego obrazu (melona) jest
