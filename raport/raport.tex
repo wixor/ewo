@@ -269,13 +269,12 @@ watermelon, fruits (-23.120878)
 \end{verbatim}
 
 \paragraph{Ananas}
-Bardzo ciekawym eksperymentem okazało się wyszukiwanie ananasa. Kształt ananasa jest bardzo charakterystyczny i powoduje powstanie bardzo
-dobrze rozłożonych punktów charakterystycznych, szczególnie w obszarze korony. Jednak kształt ten jest też bardzo nieregularny i, choć
-,,na oko'' ananasy są do siebie podobne, punkty charakterystyczne dwóch różnych zdjęć mogą się bardzo istotnie różnić. Z drugiej strony,
-w bazie danych nie znajduje się żaden owoc choć trochę podobny do ananasa (nie będący ananasem), zatem są nadzieje, że eksperyment powiedzie
-się. Otrzymane wyniki pokazują, że istotnie najlepsze dopasowanie otrzymano dla ananasa, jednak odległość do kolejnego obrazu (melona) jest
-bardzo niewielka. Co więcej, program dopasował ananasy... do góry nogami! Dopasowanie to przedstawiono na rysunku \ref{pineapple}. Kolorem
-czerwonym zaznaczono punkty charakterystyczne ananasa z bazy danych.
+Bardzo ciekawym eksperymentem okazało się wyszukiwanie ananasa. Kształt ananasa jest bardzo charakterystyczny i powoduje powstanie równomiernie
+rozłożonych punktów charakterystycznych. Jednak kształt ten jest też bardzo nieregularny i, choć ,,na oko'' ananasy są do siebie podobne, punkty
+charakterystyczne dwóch różnych zdjęć mogą się bardzo istotnie różnić. Z drugiej strony, w bazie danych nie znajduje się żaden owoc choć trochę
+podobny do ananasa (nie będący ananasem), zatem są nadzieje, że eksperyment powiedzie się. Otrzymane wyniki pokazują, że istotnie najlepsze
+dopasowanie otrzymano dla ananasa, jednak odległość do kolejnego obrazu (melona) jest bardzo niewielka. Co więcej, program dopasował ananasy...
+ do góry nogami! Dopasowanie to przedstawiono na rysunku \ref{pineapple}. Kolorem czerwonym zaznaczono punkty charakterystyczne ananasa z bazy danych.
 \begin{verbatim}
 pineapple, fruits (-11.685663)
 watermelon, fruits (-12.371205)
@@ -293,13 +292,16 @@ pear, fruits (-13.062563)
 \end{figure}
 
 \subsection{Rozpoznawanie trójliterówek}
-Kolejną grupą eksperymentów, którymi zajmiemy się w tym raporcie, będzie próba dopasowania tych samych słów (trzyliterowych) ale napisanych inną czcionką.
-Wbrew pozorom, nie jest to zadanie łatwe - na rozkład POI w bardzo dużym stopniu zależy od grubości linii w czcionce kąta nachylenia pisma. Okazuje się jednak, że większość nieskomplikowanych 
-testów nasz program przechodzi poprawnie.
-Baza słów wygląda następująco: car cut bra sex six jeb map rap two bar sut. Napisane są czcionką Sans.
+
+Kolejną grupą eksperymentów, którymi zajmiemy się w tym raporcie, będzie próba dopasowania tych samych słów (trzyliterowych), ale napisanych inną czcionką.
+Wbrew pozorom, nie jest to zadanie łatwe -- na rozkład POI w bardzo dużym stopniu wpływa grubości linii oraz kąta nachylenia pisma. Okazuje się jednak, że
+program przechodzi większość nieskomplikowanych testów poprawnie. Baza słów wygląda zawiera następujące trójliterówki napisane czcionką Sans:
+car cut bra sex six jeb map rap two bar sut.
+
 \paragraph{Słowo cut}
-W tym teście spróbujemy rozszyfrować słowo cut napisane inną czcionką. Jest bardziej pochyła i ma cieńszą linię.
-Wyniki jednak cieszą:
+W tym teście spróbujemy rozszyfrować słowo cut napisane inną czcionką. Jest bardziej pochyła i ma cieńszą linię. Test uznajemy za udany, dopasowanie słowa
+cut napisaego różnymi czcionkami przestawione jest na rysunku \ref{cut}. Zgodna z oczekiwaniami jest także niewielka odległość słów cut i sut -- w końcu
+mają one dwie litery wspólne.
 \begin{verbatim}
 cut, 3letters (-10.864353)
 sut, 3letters (-11.867450)
@@ -307,13 +309,12 @@ car, 3letters (-12.411745)
 bra, 3letters (-13.751248)
 rap, 3letters (-14.585580)
 \end{verbatim}
-Dopasowanie słowa cut napisanych różnymi czcionkami przestawione jest na rysunku \ref{cut}.
-Zgodna z oczekiwaniami jest także niewielka odległość słów cut i sut - w końcu mają dwie litery wspólne.
 
 \paragraph{Słowo jeb}
-Ten test jest dobrym przykładem tak zwanego Pyrrusowego zwycięstwa. Zapytaniem jest słowo jeb, obrócone o 90 stopni napisane pochyłą czcionką.
-Nasz algorytm znajduje poprawne dopasowanie -- \ref{jeb} -- ale wyższą wartość ma słowo sex -- \ref{jeb_sex}.
-Jednak wyniki są znowu zaskakujące:
+W tym teście zapytaniem jest słowo jeb, obrócone o 90 stopni napisane pochyłą czcionką. Nasz algorytm znajduje poprawne dopasowanie (rys. \ref{jeb}), lecz
+ale wyższą wartość funkcji celu osiąga ma słowo sex (rys. \ref{jeb_sex}). Jednak wyniki są jednak zaskakujące. Udało nam się wychwycić słabą stronę algorytmu:
+kształt jest inny, jednak przypadkowo dopasował się wyjątkowo dobrze. Niestety, trudno takich błędów się pozbyć. W tym teście nie uzyskaliśmy optymalnego
+wyniku, jednak oczekiwane słowo znajduje się w pierwszej trójce propozycji.
 \begin{verbatim}
 sex, 3letters (-10.982061)
 two, 3letters (-11.131102)
@@ -321,13 +322,10 @@ jeb, 3letters (-11.574780)
 sut, 3letters (-11.622553)
 cut, 3letters (-11.646334)
 \end{verbatim}
-Udało nam się wychwycić słabą stronę algorytmu; kształt jest inny, jednak przypadkowo dopasował się wyjątkowo dobrze. Niestety, trudno takich błędów się pozbyć. W tym teście nie uzyskaliśmy 
-optymalnego wyniku, jednak dwa cele zostały osiągnięte -- oczekiwane słowo znajduje się w pierwszej trójce propozycji oraz znaleźliśmy poprawne dopasowanie między tymi samymi słowami.
-
 
 \begin{figure}\centering
-\subfloat[\texttt{cut} do \texttt{cut}, różne czcionki]{\includegraphics[width=6cm,keepaspectratio=true]{./diff_cut_cut.png}\label{cut}}\hspace{5mm}
-\subfloat[\texttt{jeb} do \texttt{jeb}, różne czcionki]{\includegraphics[width=6cm,keepaspectratio=true]{./diff_jeb_jeb.png}\label{jeb}}
+\subfloat[\texttt{cut} do \texttt{cut}, różne czcionki]{\includegraphics[width=6cm,keepaspectratio=true]{./diff_cut_cut.png}\label{cut}}\\
+\subfloat[\texttt{jeb} do \texttt{jeb}, różne czcionki]{\includegraphics[width=6cm,keepaspectratio=true]{./diff_jeb_jeb.png}\label{jeb}}\hspace{5mm}
 \subfloat[\texttt{sex} do \texttt{jeb}]{\includegraphics[width=6cm,keepaspectratio=true]{./diff_jeb_sex.png}\label{jeb_sex}}
 \caption{Dopasowania niektórych słów trzyliterowych}
 \end{figure}
