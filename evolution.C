@@ -634,7 +634,8 @@ public:
             debug("start comparing to %s\n", datable[i].name);
             Agent A = Population(&datable[i], &alienDat).evolve();
             similars.push_back(std::make_pair(&datable[i], A));
-            
+
+#if 0
             /* this outputs best match to diff_{name}.pgm */
             CairoImage diffIm(alienImg);
             Composite::difference(datable[i].compimg, alienImg, A.M, &diffIm);
@@ -644,6 +645,7 @@ public:
             strcat(output, datable[i].name);
             strcat(output, ".pgm");
             dump.writePGM(output);
+#endif
             
             
         }
