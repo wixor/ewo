@@ -69,7 +69,7 @@ zbiór punktów żądaną określoną wielkość. Proces wyszukiwania ciekawych 
 \subfloat[gradient, $d = 3$]{\includegraphics[width=5.75cm,keepaspectratio=true]{./noisy-grad-3.png}}\\
 \subfloat[gradient, $d = 8$]{\includegraphics[width=5.75cm,keepaspectratio=true]{./noisy-grad-8.png}}\hspace{5mm}
 \subfloat[gradient, łącznie]{\includegraphics[width=5.75cm,keepaspectratio=true]{./noisy-grad.png}}\\
-\subfloat[znalezione punkty]{\includegraphics[width=5.75cm,keepaspectratio=true]{./noisy-pois.png}}
+\subfloat[znalezione punkty]{\includegraphics[width=5.75cm,keepaspectratio=true]{./noisy-pois.png}\label{noisypois}}
 \caption{Proces wyszukiwania punktów charakterystycznych}\label{poisrch}
 \end{figure}
 
@@ -299,8 +299,8 @@ program przechodzi większość nieskomplikowanych testów poprawnie. Baza słó
 car cut bra sex six jeb map rap two bar sut.
 
 \paragraph{Słowo cut}
-W tym teście spróbujemy rozszyfrować słowo cut napisane inną czcionką. Jest bardziej pochyła i ma cieńszą linię. Test uznajemy za udany, dopasowanie słowa
-cut napisaego różnymi czcionkami przestawione jest na rysunku \ref{cut}. Zgodna z oczekiwaniami jest także niewielka odległość słów cut i sut -- w końcu
+W tym teście spróbujemy rozszyfrować słowo cut napisane inną czcionką: jest bardziej pochyła i ma cieńszą linię. Test uznajemy za udany, dopasowanie słowa
+cut napisanego różnymi czcionkami przestawione jest na rysunku \ref{cut}. Zgodna z oczekiwaniami jest także niewielka odległość słów cut i sut -- w końcu
 mają one dwie litery wspólne.
 \begin{verbatim}
 cut, 3letters (-10.864353)
@@ -312,7 +312,7 @@ rap, 3letters (-14.585580)
 
 \paragraph{Słowo jeb}
 W tym teście zapytaniem jest słowo jeb, obrócone o 90 stopni napisane pochyłą czcionką. Nasz algorytm znajduje poprawne dopasowanie (rys. \ref{jeb}), 
-lecz wyższą wartość funkcji celu osiąga słowo sex (rys. \ref{jeb_sex}). Jednak wyniki są zaskakujące. Udało nam się wychwycić słabą stronę algorytmu:
+lecz wyższą wartość funkcji celu osiąga słowo sex (rys. \ref{jeb_sex}). Wynik ten może być zaskakujący. Udało nam się wychwycić słabą stronę algorytmu:
 kształt jest inny, a przypadkowo dopasował się wyjątkowo dobrze. Niestety, trudno takich błędów się pozbyć. W tym teście nie uzyskaliśmy optymalnego
 wyniku, jednak oczekiwane słowo znajduje się w pierwszej trójce propozycji.
 \begin{verbatim}
@@ -331,18 +331,20 @@ cut, 3letters (-11.646334)
 \end{figure}
 
 \subsection{Rozpoznawanie obrazów zaszumionych}
-Wykonaliśmy też kilka eksperymentów z obrazkami zaszumionymi. Te jednak okazały się całkowitą klapą. Z powodu sporego szumu tła zawodzi wyszukiwanie punktów charakterystycznych.
-Już na obrazku na Rysunku 2 (e) jest kilka punktów, które nie powinny się pojawić (nie leżące na krawędzi interesującego nas czarnego obszaru). 
-Niestety, szum tła z punktu widzenia algorytmu jest istotny -- dopiero ludzi mózg jest w stanie dostrzec, że tak naprawdę można go zignorować i to co jest istotne, to jedynie czarne obszary.
+
+Wykonaliśmy też kilka eksperymentów z obrazkami zaszumionymi. Te jednak okazały się całkowitą klapą. Z powodu sporego szumu tła zawodzi wyszukiwanie
+punktów charakterystycznych. Już na obrazku na rys. \ref{noisypois} jest kilka punktów, które nie powinny się pojawić (nie leżące na krawędzi
+interesującego nas czarnego obszaru). Niestety, szum tła z punktu widzenia algorytmu jest istotny -- dopiero ludzi mózg jest w stanie dostrzec,
+że tak naprawdę można go zignorować i to co jest istotne, to jedynie czarne obszary.
 
 \subsection{Rozpoznawanie geometrii na przykładzie poczwórnych pasków}
-W tym paragrafie omówimy kilka benchmarków geometrycznych.
-W bazie obrazków znajdują się takie figury jak: gwiazda 4-ramienna, 3 paski, 4 paski, 5 pasków, kwadrat 4 na 4 z kropek, kwadrat pełen, kwadrat z wyciętym środkiem.
-Jednym z nich jest prosta próba dopasowania kwadratu do rombu - szczegółowo zostanie ona przedstawiona w rozdziale następnym, teraz skupmy się na rzeczy trudniejszej.
-Przeprowadziliśmy testy polegające na odpowiadanie na zapytania będące również paskami, jednak narysowanymi w inny sposób.
-Dla uwypuklenia naszej argumentacji, w tym miejscu zmieniliśmy parametr cfgPOIcount z 60 na 50.
-Test ten działa ``w kratkę''; mamy tutaj bowiem do czynienia z dwoma silnymi maksimami lokalnymi: paski nakrywające się (poprawnie) i paski ustawione prostopadle do siebie (niepoprawnie).
-W większości przypadków algorytm zwraca poprawną odpowiedź:
+
+W tym paragrafie omówimy kilka benchmarków geometrycznych. W bazie obrazków znajdują się takie figury jak: gwiazda 4-ramienna, 3 paski, 4 paski,
+5 pasków, kwadrat 4 na 4 z kropek, kwadrat pełen, kwadrat z wyciętym środkiem. Jednym z nich jest prosta próba dopasowania kwadratu do
+rombu -- szczegółowo zostanie ona przedstawiona w rozdziale następnym, teraz skupmy się na rzeczy trudniejszej. Przeprowadziliśmy testy polegające
+na odpowiadanie na zapytania będące również paskami, jednak narysowanymi w inny sposób. Dla uwypuklenia naszej argumentacji, w tym miejscu zmieniliśmy
+parametr \texttt{poiCount} z 60 na 50. Test ten działa ,,w kratkę'', mamy tutaj bowiem do czynienia z dwoma silnymi maksimami lokalnymi: paski
+nakrywające się (poprawnie) i paski ustawione prostopadle do siebie (niepoprawnie). W większości przypadków algorytm zwraca poprawną odpowiedź:
 \begin{verbatim}
 four_strips, geometry (-16.995546)
 sixteen_dots, geometry (-17.608957)
@@ -350,7 +352,6 @@ five_strips, geometry (-21.416338)
 star4, geometry (-22.383705)
 three_strips, geometry (-23.276367)
 \end{verbatim}
-
 Niestety, zdarza się także, że uda nam się trafić w to drugie maksimum. Wówczas wynik działania wygląda mniej więcej tak:
 \begin{verbatim}
 sixteen_dots, geometry (-17.669998)
@@ -359,14 +360,14 @@ four_strips, geometry (-21.770014)
 three_strips, geometry (-22.251009)
 star4, geometry (-23.067333)
 \end{verbatim}
-Poprawne i niepoprawne dopasowania pokazane są na \ref{strips4good} oraz \ref{strips4bad}. Zjawisko staje się bardziej zrozumiałe, jeśli spojrzymy na punkty charakterystyczne --
-\ref{strips4_POI}. Na pierwszy rzut oka nie widać, że przedstawiają cztery pionowe paski - bardziej 50 punktów rozrzuconych dość równomiernie po obrazie, ułożonych w kwadrat.
-Ponieważ dla poziomych pasków rozkład punktów charakterystycznych wygląda podobnie, jest to również silne maksimum lokalne.
+Poprawne i niepoprawne dopasowania pokazane są na rys. \ref{strips4good} oraz rys. \ref{strips4bad}. Zjawisko staje się bardziej zrozumiałe, jeśli
+spojrzymy na punkty charakterystyczne. Na pierwszy rzut oka nie widać, że przedstawiają cztery pionowe paski -- bardziej 50 punktów rozrzuconych dość
+równomiernie po obrazie, ułożonych w kwadrat. Ponieważ dla poziomych pasków rozkład punktów charakterystycznych wygląda podobnie, jest to również
+silne maksimum lokalne.
 
 \begin{figure}\centering
 \subfloat[źle]{\includegraphics[width=6cm,keepaspectratio=true]{./bad-diff-4strips.png}\label{strips4bad}}\hspace{5mm}
-\subfloat[dobrze]{\includegraphics[width=6cm,keepaspectratio=true]{./good-diff-4strips.png}\label{strips4good}}\\
-\subfloat[POI dla \texttt{strips4\_2}]{\includegraphics[width=6cm,keepaspectratio=true]{./4strips-pois.png}\label{strips4_POI}}\\
+\subfloat[dobrze]{\includegraphics[width=6cm,keepaspectratio=true]{./good-diff-4strips.png}\label{strips4good}}
 \caption{Dopasowania \texttt{strips4} do \texttt{strips4\_2}}
 \end{figure}
 
@@ -437,7 +438,7 @@ z prostoty testu.
 \normalsize\caption{Wpływ współczynnika przetrwania na ewolucję.}\label{surv}
 \end{figure}
 
-\section{Posumowanie: wnioski końcowe i perspektywy rozwoju}
+\section{Wnioski końcowe i perspektywy rozwoju}
 Nasz algorytm bezbłędnie działa na testach benchmarkowych, doskonale radzi sobie też z testami, w których obrazek z zapytania jest bardzo podobny do któregoś z bazowych.
 W przypadku testów, na których nie istnieje dobre przekształcenie obrazka bazowego na obrazek z zapytania, algorytm bardzo dobrze radzi sobie z testami, 
 w których nie ma wielu silnych minimów lokalnych. W przypadku testów trudniejszych nie jest niezawodny, ale niejednokrotnie zaskoczył nas poprawnością wyniku i ``błyskotliwością'' dopasowania.
