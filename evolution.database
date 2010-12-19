@@ -49,10 +49,11 @@ fruits/pear1.pgm pear
 
 ::geometry
 geom/square.pgm square
+geom/strips3.pgm three_strips
 geom/strips4.pgm four_strips
 geom/strips5.pgm five_strips
 geom/dots44_1.pgm sixteen_dots
-geom/star4_1.pgm star4
+geom/4gon.pgm star4
 
 ::square
 geom/square.pgm square
