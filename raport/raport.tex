@@ -235,23 +235,32 @@ Znalezione dopasowanie przedstawione jest na Rysunku 4.
 W tym eksperymencie będziemy porównywać zdjęcie gruszki do bazy owoców. Oczywiście, oczekujemy, że najbliższym owocem okaże się także gruszka.
 Ten eksperyment jest prosty, gdyż gruszki są do siebie podobne.
 Poniżej przedstawiam wyniki:
-
+\begin{verbatim}
 pear, fruits (-16.697315)
 paprika, fruits (-18.802341)
 banana, fruits (-19.460381)
 cherry, fruits (-21.882196)
 watermelon, fruits (-23.120878)
+\end{verbatim}
+Jak widać, są zgodne z oczekiwaniami. Co więcej, całkiem dobrze do gruszki dopasowała się papryka, co jest nawet zgodne z intuicją - gruszka i papryka mają, z grubsza, podobny kształt.
+Oba dopasowania przedstawione są na rysunku 5.
 
-Jak widać, są zgodne z oczekiwaniami. Co więcej, całkiem dobrze do gruszki dopasowała się papryka. Oba dopasowania przedstawione są na rysunku 5.
-
-
-Wzbudzającym 
-
+\paragraph{Ananas}
+Wzbudzającym kontrowersje jest próba odpowiedzi, do którego z owoców podobny jest ananas (zapytaniem jest pineapple3).
+Jasnym jest, że poprawną odpowiedzią jest: ananas. Okazuje się, że nawet dla bardzo, wizualnie, podobnych ananasów, program daje zaskakujące wyniki.
+Oto wynik działania:
+\begin{verbatim}
 pineapple, fruits (-11.685663)
 watermelon, fruits (-12.371205)
 apple, fruits (-12.665856)
 paprika, fruits (-13.042226)
 pear, fruits (-13.062563) (działa)
+\end{verbatim}
+Najlepsze dopasowanie obrazków pineapple i pineapple3 przedstawione jest na rysunku 6. Dopasowały się.. do góry nogami! Wyjaśnienie tego faktu jest proste, jak spojrzymy na drugą część
+Rysunku 6, przedstawiającego punkty charakterystyczne. Ich zbiór okazuje się być niemalże symetryczny - co prowadzi do tak zaskakujących wyników.
+
+\subsection{Trzyliterówki}
+Teraz przedstawimy wyniki kilku eksperymentów polegających na rozpoznaniu
 
 
 
@@ -276,12 +285,13 @@ pear, fruits (-13.062563) (działa)
 \begin{figure}\centering
 \subfloat[Gruszka i Gruszka]{\includegraphics[width=5cm,keepaspectratio=true]{./diff_pear.png}}
 \subfloat[Gruszka i Papryka]{\includegraphics[width=5cm,keepaspectratio=true]{./diff_paprika.png}}
-\caption{Dopasowania pear i paprika do pear2}
+\caption{Dopasowania \texttt{pear} i \texttt{paprika} do \texttt{pear2}}
 \end{figure}
 
 \begin{figure}\centering
-\includegraphics[width=6cm,keepaspectratio=true]{./diff_pineapple.png}
-\caption{Dopasowanie \texttt{pineapple} do \texttt{pineapple3}}
+\subfloat[Ananas i Ananas]{\includegraphics[width=6cm,keepaspectratio=true]{./diff_pineapple.png}}
+\subfloat[POI ananasa]{\includegraphics[width=6cm,keepaspectratio=true]{./pineapple_pois.png}}
+\caption{Dopasowanie \texttt{pineapple} do \texttt{pineapple3} oraz punkty charakterystyczne tego drugiego}
 \end{figure}
 
 \begin{figure}\centering
