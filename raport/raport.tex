@@ -7,6 +7,8 @@
 \usepackage{graphicx}
 \usepackage{subfig}
 \usepackage{wrapfig}
+
+\newcommand{\nel}[1]{|#1|}
 \usepackage{program}
 
 \title{\textbf{Algorytmy ewolucyjne}\\
@@ -14,14 +16,14 @@
 \author{Karol Konaszyński i Wiktor Janas}
 \date{Wrocław, dnia \today\ r.}
 
-\begin{document}
-\maketitle
-
 \newcommand{\avg}{\mathrm{avg}}
 \newcommand{\dist}{\mathrm{dist}}
 \newcommand{\median}{\mathrm{median}}
 \newcommand{\target}{\mathrm{target}}
 \newcommand{\RETURN}{|return|\ }
+
+\begin{document}
+\maketitle
 
 Tematem tego projektu jest zastosowanie algorytmów ewolucyjnych do rozpoznawania obrazów. 
 Problem rozpoznawania obrazów ma liczne zastosowania: od analizy zdjęć satelitarnych poprzez monitorowanie ruchu drogowego, po przemysł filmowy.
@@ -67,18 +69,19 @@ zbiór punktów żądaną określoną wielkość. Proces wyszukiwania ciekawych 
 \caption{Proces wyszukiwania punktów charakterystycznych}\label{poisrch}
 \end{figure}
 
-\subsection{Zastosowanie ewolucji i kodowanie osobników}
-Mając już punkty charakterystyczne, możemy zająć się badaniem podobienstwa obrazków. Mówimy, że obrazki są równoważne, jeżeli istnieje przekształcenie afiniczne 
-przenoszące jeden na drugi. Miarą podobieństwa dwóch zbiorów punktów infimum, po wszystkich przekształceniach,
-sumy ,,odległości,, jednego z nich od przekształconego drugiego oraz w drugą stronę. 
-Odległość natomiast dwóch zbiorów definiujemy jako średnią odległość pomiędzy punktem z pierwszego zbioru a najbliższym mu punktem z drugiego, Formalniej,
-\[
-\mathrm{similar}(\bar{A}, \bar{B}) = \inf\{\textrm{dist}(\bar{A} - M\bar{B}) \;\arrowvert\; M\text{: afiniczne}\}
-\]gdzie:
-\[
-\dist(\{a_1, \dots, a_m\}, \{b_1, \dots, b_n\}) = \frac{\sum_{i=1}^m \min_{j=1..n}(\|a_i - b_j\|)}{m} + \frac{\sum_{i=1}^n \min_{j=1 \dots m}(\|b_i - a_j\|)}{n}
-\]
-Jednak aby znaleźć wielkość $\mathrm{similar}$ musimy znaleźć przekształcenie minimalizujące odległość. I tutaj zastosujemy ewolucję. 
+\section{Analiza podobieństwa obrazów}
+
+Mając określone punkty charakterystyczne, możemy zająć się badaniem podobienstwa obrazków.
+Odległość od zbioru punktów $\bar P$ do zbioru $\bar Q$ definiujemy jako
+\[ \dist(\bar P \rightarrow \bar Q) = \frac{1}{\nel{\bar P}} \cdot \sum_{p \in \bar P} \min_{q \in \bar Q}(\|p - q\|) \]
+Odległość między zbiorami $\bar P$ a $\bar Q$ definiujemy jako
+\[ \dist(\bar P, \bar Q) = \frac{\nel{\bar P} \cdot \dist(\bar P \rightarrow \bar Q) + \nel{\bar Q} \cdot \dist(\bar Q \rightarrow \bar P)}{\nel{\bar P} + \nel{\bar Q}} \]
+Za miarę podobieństwa dwóch zbiorów punktów przyjmujemy
+\[ \mathrm{similar}(\bar P, \bar Q) = \inf\{\dist(\bar P, M\bar Q) \;\arrowvert\; M\text{: afiniczne}\} \]
+Jednak aby znaleźć tę musimy znaleźć przekształcenie minimalizujące wartość $\dist$. I tutaj wkracza ewolucja. 
+
+\section{Ewolucja}
+
 Naszymi osobnikami będą macierze afiniczne, czyli macierze postaci:
 $\begin{pmatrix}
 \star & \star & \star \\
@@ -86,22 +89,18 @@ $\begin{pmatrix}
 0 & 0 & 1
 \end{pmatrix}$, gdzie drugi minor główny jest złożeniem obrotu i skalowania, natomiast ostatnia kolumna odpowiada za translację.
 Funkcją celu jest zatem 
-\[
-\target = -\dist(\bar{q}, M\bar{b})
-\]
-gdzie $\bar{q}$ jest wektorem punktów charakterystycznych obrazka z zapytania, zaś $\bar{b}$ - wektorem tychże dla obrazka z bazy.
+\[ \target = -\dist(\bar P,  M\bar Q) \]
+gdzie $\bar P$ jest wektorem punktów charakterystycznych obrazka z zapytania, zaś $\bar Q$ -- wektorem tychże dla obrazka z bazy.
 Celem ewolucji jest zmaksymalizowanie funkcji celu, czyli znalezienie przekształcenia minimalizującego odległość.
 
-\subsection{Ewolucja}
-Do niniejszego problemu wykorzystaliśmy ideę Differential Evolution. Pseudokod funkcji wykonującej ewolucję wygląda następująco:
-\begin{figure}
+Do rozwiązania tego problemu wykorzystaliśmy ideę Differential Evolution. Pseudokod zaimplementowanego algorytmu przedstawiony został na listingu: 
 \begin{program}
 \FUNCT |evolve| \BODY
     P := \{\}
     \FOR i := 1 \TO N \DO
-        P := P + |random_translation|() * |random_rotation|() * |random_scaling|()
+        P := P + |random_translation| * |random_rotation| * |random_scaling|
     \END
-    \WHILE \NOT |termination_condition|() \DO
+    \WHILE \NOT |termination_condition| \DO
         \FOR i := 1 \TO N \DO
             |evaluate|(P_i)
         \END
@@ -121,43 +120,42 @@ Do niniejszego problemu wykorzystaliśmy ideę Differential Evolution. Pseudokod
                 \THEN P_i := |random_scaling| * P_i; \FI
             \IF |random|(|r_prop|)
                 \THEN P_i := |random_rotation| * P_i; \FI
+	    \IF |random|(|f_prop|)
+                \THEN P_i := |random_flip| * P_i; \FI
         \END
     \END
 \END
-
-\FUNCT |de_crossover| \BODY
+~
+\FUNCT |de_crossover|(P) \BODY
     x1 := |roulette_selection|(P)
     x2 := |roulette_selection|(P),\; x1 \neq x2
     x3 := |roulette_selection|(P),\; x3 \neq x1,\; x3 \geq x2
     \RETURN x1 + (x3-x2) * f_\text{de}
 \END
-
+~
 \FUNCT |termination_condition| \BODY
-    \RETURN |generation_index| > G \vee
-            |max_target|(|generation_index|, |generation_index|-K) \geq
-            |max_target|(|generation_index|-K, |generation_index|-2*K)
+    \RETURN |gen_idx| > G \OR 
+	    |max_target|(|gen_idx|, |gen_idx|-K) \geq |max_target|(|gen_idx|-K, |gen_idx|-2*K)
 \END
 \end{program}
-\end{figure}
 
-Skomentuję krótko działanie powyższych funkcji. Najpierw odbywa się losowa inicjacja populacji z parametrem N. Następnie wchodzimy w pętlę ewolucji,
-która wykonuje się aż nie zostanie spełniony warunek zakończenia.
-W pętli, pierwszą rzeczą jest ewaluacja każdego osobnika, czyli znalezienie dla niego wartości $\target$. 
-Potem następuje zastąpienie części populacji przez osobniki bądź otrzymane w wyniku krzyżowania DE (z określonym jako parametr prawdopodobieństwem),
-bądź wybrane na zasadzie ruletki z całości populacji (zjawisko generational gap).
-Na końcu działania ciała pętli następuje mutacja każdego osobnika, czyli przemnożenie go (z lewej strony) przez macierz losowego przesunięcia, 
-skalowania bądź obrotu, z prawdopodobieństwami określonymi jako globalne parametry algorytmu.
-Warunkiem zakończenia jest natomiast przekroczenie pewnej ilości pokoleń (parametr algorytmu, zwykle rzędu 200) bądź stwierdzeniem, 
-że w czasie ostatnich K pokoleń nie nastąpiła poprawa w stosunku do poprzednich K pokoleń (K jest również parametrem). Precyzyjniej, najlepszy osobnik z ostatnich 
-K pokoleń okazał się nielepszy niż najlepszy z poprzednich K pokoleń.
+Najpierw odbywa się losowa inicjacja populacji z parametrem N. Następnie wchodzimy w pętlę ewolucji, która wykonuje się aż nie zostanie spełniony
+warunek zakończenia. W pętli, pierwszą czynnością jest ewaluacja każdego osobnika, czyli znalezienie dla niego wartości target oraz fitness,
+gdzie fitness jest współczynnikiem przystosowania:
+\[ \mathrm{fitness}(p) = \frac{\target(p) - \min_{q \in P}\target(q)}{\sum_{r \in P} \target(r) - \min_{q \in P}\target(q)} \]
+Wartość fitness jest wykorzystywana do uporządkowania osobników od najlepszego do najgorszego oraz podczas selekcji ruletkowej.
+Potem następuje selekcja blokowa połączona z krzyżowaniem, ostatecznie zaś mutacja każdego osobnika. Warunkiem zakończenia ewolucji
+jest przekroczenie pewnej ustalonej ilości pokoleń (zwykle rzędu 200) bądź stwierdzenie, że w czasie ostatnich $K$ pokoleń nie nastąpiła
+poprawa w stosunku do poprzednich $K$ pokoleń ($K$ jest również parametrem).
 
-Skomentuję jeszcze dwa miejsca w tym algorytmie.
-Krzyżowanie DE polega na wybraniu, na zasadzie ruletki, trzech różnych osobników $x_1, x_2, x_3$ a następnie utworzeniu z nich osobnika postaci
-$x1 + f_\text{de}\cdot(x3-x2)$, gdzie $f_\text{de}$ jest także parametrem, zaś operacja dodawania i mnożenia jest zwykłą operacją dodawania macierzy 
-i mnożenia ich przez skalar.
-Ważną obserwacją którą poczyniliśmy jest to, że nie warto dokonywać losowych obrotów wokół (domyślnie) punktu (0,0), 
-gdyż to spowoduje duże zmiany w położeniu punktów oddalonych od środka układu współrzędnych. Aby tego uniknąć, obroty i skalowania wykonujemy względem punktu wybranego z małego otoczenia
-mediany zbioru punktów; konkretniej, względem punktu $(\median(\bar{X}), \median(\bar{Y}))$, gdzie $\bar{X}, \bar{Y}$ są zbiorami współrzędnych x, y punktów ze zbioru.
+Krzyżowanie polega na wybraniu metodą ruletki trzech różnych osobników $x_1, x_2, x_3$ a następnie utworzeniu z nich osobnika postaci
+$x1 + f_\text{de}\cdot(x3-x2)$, gdzie $f_\text{de}$ jest parametrem, zaś operacja dodawania i mnożenia jest zwykłą operacją dodawania
+macierzy i mnożenia ich przez skalar.
+
+Ważną obserwacją którą poczyniliśmy jest to, że nie warto dokonywać losowych skalowań, czy obrotów wokół punktu $(0,0)$, gdyż to spowoduje duże
+zmiany w położeniu punktów oddalonych od środka układu współrzędnych (czyli lewego górnego rogu). Aby tego uniknąć, obroty i skalowania wykonujemy
+względem punktu wybranego z małego otoczenia punktu $(\median(\bar X), \median(\bar Y))$, gdzie $\bar X, \bar Y$ są zbiorami współrzędnych x, y
+punktów charakterystycznych.
 
 \begin{figure}\centering
 \footnotesize\include{applemod-vs-fruits}\vspace{-2em}
