@@ -31,9 +31,8 @@ Z drugiej rozwiązanie go okazuje się być trudne, a pojęcie ,,podobieństwa o
 Podejście zaproponowane w tej pracy polega na analizie samego kształtu obrazu, który uzyskujemy poprzez analizę jasności poszczególnych
 pikseli (z pominięciem informacji o kolorze).
 
-Przyjęliśmy następujące założenia: dana jest baza obrazów o zadanych nazwach (to znaczy, że wiemy, co one przedstawiają).
-Każdy obraz, który chcemy rozpoznać (zapytanie) jest przyrównywane dp wszystkich obrazów z bazy.
-Spośród obrazów bazowych wybieramy te, których odległość do zapytania jest najmniejsza.
+Przyjęliśmy następujące założenia: dana jest baza obrazów o zadanych nazwach (patrz rys. \ref{knownpics}). Każdy obraz, który chcemy rozpoznać
+(zapytanie) jest przyrównywane dp wszystkich obrazów z bazy. Spośród obrazów bazowych wybieramy te, których odległość do zapytania jest najmniejsza.
 
 \section{Znajdowanie punktów charakterystycznych}
 Pierwszym etapem przetwarzania obrazu (pochodzącego z bazy danych lub będącego zapytaniem) jest znalezienie na nim punktów charakterystycznych.
@@ -61,11 +60,16 @@ odwrotnie proporcjonalna do miary ciekawości punktu z pewnym współczynnikiem,
 zbiór punktów żądaną określoną wielkość. Proces wyszukiwania ciekawych punktów ilustruje rysunek \ref{poisrch}.
 
 \begin{figure}\centering
-\subfloat[gradient, $d = 1$]{\includegraphics[width=6cm,keepaspectratio=true]{./noisy-grad-1.png}}\hspace{5mm}
-\subfloat[gradient, $d = 3$]{\includegraphics[width=6cm,keepaspectratio=true]{./noisy-grad-3.png}}\\
-\subfloat[gradient, $d = 8$]{\includegraphics[width=6cm,keepaspectratio=true]{./noisy-grad-8.png}}\hspace{5mm}
-\subfloat[gradient, łącznie]{\includegraphics[width=6cm,keepaspectratio=true]{./noisy-grad.png}}\\
-\subfloat[znalezione punkty]{\includegraphics[width=6cm,keepaspectratio=true]{./noisy-pois.png}}
+\subfloat[Jabłko]{\includegraphics[width=4.5cm,keepaspectratio=true]{./apple-mod-pois.png}}
+\subfloat[Wisienki]{\includegraphics[width=4.5cm,keepaspectratio=true]{./cherries-pois.png}}
+\subfloat[Trójliterówka]{\includegraphics[width=4.5cm,keepaspectratio=true]{./jeb-pois.png}}
+\caption{Przykładowe obrazy z bazy danych wraz z punktami charakterystycznymi}\label{knownpics}
+
+\subfloat[gradient, $d = 1$]{\includegraphics[width=5.75cm,keepaspectratio=true]{./noisy-grad-1.png}}\hspace{5mm}
+\subfloat[gradient, $d = 3$]{\includegraphics[width=5.75cm,keepaspectratio=true]{./noisy-grad-3.png}}\\
+\subfloat[gradient, $d = 8$]{\includegraphics[width=5.75cm,keepaspectratio=true]{./noisy-grad-8.png}}\hspace{5mm}
+\subfloat[gradient, łącznie]{\includegraphics[width=5.75cm,keepaspectratio=true]{./noisy-grad.png}}\\
+\subfloat[znalezione punkty]{\includegraphics[width=5.75cm,keepaspectratio=true]{./noisy-pois.png}}
 \caption{Proces wyszukiwania punktów charakterystycznych}\label{poisrch}
 \end{figure}
 
@@ -82,7 +86,7 @@ Jednak aby znaleźć tę musimy znaleźć przekształcenie minimalizujące warto
 
 \section{Ewolucja}
 
-Naszymi osobnikami będą macierze afiniczne, czyli macierze postaci:
+Naszymi osobnikami będą macierze afiniczne, czyli macierze postaci
 $\begin{pmatrix}
 \star & \star & \star \\
 \star & \star & \star \\
@@ -180,12 +184,25 @@ punktów charakterystycznych.
 \caption{Dopasowanie \texttt{cherries} do \texttt{cherries6}}
 \end{figure}
 
+\section{Uwagi implementacyjne}
 
-\begin{figure}\centering
-\subfloat[Jabłko]{\includegraphics[width=5cm,keepaspectratio=true]{./apple-mod-pois.png}}
-\subfloat[Wisienki]{\includegraphics[width=5cm,keepaspectratio=true]{./cherries-pois.png}}
-\subfloat[Trójliterówka]{\includegraphics[width=5cm,keepaspectratio=true]{./jeb-pois.png}}
-\caption{Wybrane obrazy testowe}
-\end{figure}
+Program wymaga systemu operacyjnego GNU/Linux. Do jego kompilacji niezbędne są, poza standardowymi narzędziami, pliki nagłówkowe biblioteki GTK+,
+zazwyczaj dostępne w pakiecie \texttt{libgtk2.0-dev} lub podobnym. Aby skompilować program należy w katalogu ze źródłami wydać polecenie \texttt{make}.
+W wyniku jego wykonania powinien powstać plik wykonywalny o nazwie \texttt{evolution}. Program przyjmuje dwa parametry, plik z obrazkiem-zapytaniem oraz
+nazwę grupy obrazków z bazy danych. Przykładowe wywołanie może zatem wyglądać następująco:
+\begin{verbatim}./evolution fruits/apple-mod.pgm fruits\end{verbatim}
+Powyższe polecenie powoduje porównanie obrazka zawartego w pliku \texttt{fruits/apple-mod.pgm} do wszystkich obrazków z kategorii \texttt{fruits}.
+Kategorie są opisane w pliku \texttt{evolution.database} i można je edytować. Gdy program otrzymuje obraz do analizy po raz pierwszy, niezbędne jest
+wyszukanie punktów charakterystycznych. Jest to długotrwała czynność (może trwać nawet pół minuty dla jednego obrazka), jednak znalezione punkty
+charakterystyczne są zapisywane na dysk i przy kolejnych uruchomieniach program będzie korzystał z obliczonych wcześniej danych. Program wczytuje
+obrazy w formacie \texttt{pgm}, wraz z kodem źródłowym dostarczane są przykładowe obrazy (w katalogach \texttt{digs}, \texttt{fruits}, \texttt{geom},
+\texttt{noise} oraz \texttt{text}). Uwaga: program nie potrafi wczytać obrazów, które zawierają komentarze. Pliki \texttt{pgm} tworzone przez program
+GIMP zawierają komentarz (i nie jest nam znana żadna metoda skłonienia GIMPa do nie umieszczania komentarza w plikach \texttt{pgm}). Wraz z kodem
+źródłowym dostarczono skrypt \texttt{rmhash}, który usuwa komentarze z plików \texttt{pgm}.
+
+Kod źródłowy podzielony jest na kilka plików. Główna część programu znajduje się w pliku \texttt{evolution.C}. Plik \texttt{poi.C} zawiera algorytm
+wyszukiwania punktów charakterystycznych. Plik i \texttt{image.C} oraz \texttt{composite.C} zawierają kod operacji na obrazkach. Pliki \texttt{gui.C}
+oraz \texttt{gui-gtk.c} zawierają implementację graficznego interfejsu użytkownika. Plik \texttt{workers.C} zawiera framework dla przetwarzania
+wielowątkowego, zaś plik \texttt{config.C} zawiera parser konfiguracji.
 
 \end{document}
