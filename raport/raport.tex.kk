@@ -144,7 +144,7 @@ else return false
 
 \end{lstlisting}
 
-Skomentuję krótko działanie powyższych funkcji. Najpierw odbywa się losowa inicjacja populacji z parametrem N. Następnie wchodzimy w pętlę ewolucji,
+Opiszę krótko działanie powyższych funkcji. Najpierw odbywa się losowa inicjacja populacji z parametrem N. Następnie wchodzimy w pętlę ewolucji,
 która wykonuje się aż nie zostanie spełniony warunek zakończenia.
 W pętli, pierwszą rzeczą jest ewaluacja każdego osobnika, czyli znalezienie dla niego wartości $target$. 
 Potem następuje zastąpienie części populacji przez osobniki bądź otrzymane w wyniku krzyżowania DE (z określonym jako parametr prawdopodobieństwem),
@@ -162,6 +162,14 @@ i mnożenia ich przez skalar.
 Ważną obserwacją którą poczyniliśmy jest to, że nie warto dokonywać losowych obrotów wokół (domyślnie) punktu (0,0), 
 gdyż to spowoduje duże zmiany w położeniu punktów oddalonych od środka układu współrzędnych. Aby tego uniknąć, obroty i skalowania wykonujemy względem punktu wybranego z małego otoczenia
 mediany zbioru punktów; konkretniej, względem punktu $(median(\bar{X}), median(\bar{Y}))$, gdzie $\bar{X}, \bar{Y}$ są zbiorami współrzędnych x, y punktów ze zbioru.
+
+\section{Eksperymenty}
+Przeprowadzane eksperymenty podzieliliśmy na kilka grup: rozpoznawanie owoców, cyfr, słów trzyliterowych oraz obrazków bardzo zaszumionych.
+Opiszemy tutaj kilka z nich, a następnie przedstawimy wyniki kilkudziesięciu.
+Eksperyment polega na ustaleniu grupy obrazków bazowych (rzędu 10 - 20), wybraniu obrazka do zapytania, który jest "podobny" do któregoś z bazowych a następnie uruchomieniu algorytmu
+i wypisaniu pięciu najbardziej podobnych obrazków bazowych wraz z ich odległościami. Na tej podstawie, już czysto optycznie, stwierdzimy czy program rzeczywiście dał "poprawne" odpowiedzi.
+Przedstawimy tutaj zarówno eksperymenty udane jak również nieudane, 
+
 
 
 

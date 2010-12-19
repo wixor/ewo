@@ -644,6 +644,22 @@ public:
             debug("okay, start comparing to %s\n", datable[i].name);
             Agent A = Population(&datable[i], &alienDat).evolve();
             similars.push_back(std::make_pair(&datable[i], A));
+            
+            // CairoImage bestIm(alienImg.getWidth(), alienImg.getHeight());
+            // Composite::transform(datable[i].compimg, A.M, &bestIm);
+            
+            CairoImage diffIm(alienImg);
+            Composite::difference(datable[i].compimg, alienImg, A.M, &diffIm);
+            Image dump(alienImg);
+            diffIm.toImage(&dump);
+            char output[128] = "diff";
+            // strcat(output, );
+            strcat(output, "_");
+            strcat(output, datable[i].name);
+            strcat(output, ".pgm");
+            dump.writePGM(output);
+            
+            
         }
         
         sort(similars.begin(), similars.end(), fooCompare);
@@ -652,6 +668,8 @@ public:
         for (ret.ile=0; ret.ile<Result::ILE && ret.ile<(int)similars.size(); ret.ile++)
             ret.tab[ret.ile] = similars[ret.ile].first,
             ret.value[ret.ile] = similars[ret.ile].second.target;
+        
+        
         
         return ret;
     }   
@@ -728,6 +746,20 @@ int main(int argc, char *argv[])
         fprintf(stderr, "usage: [input: alien] [category]\n");
         return 1;
     }
+    
+#if 0
+    {
+        Image inp = Image::readPGM(argv[1]);
+        std::vector<float> scales(3, 1.f);
+        scales[1] = 3.f; scales[2] = 8.f;
+        Array2D<float> eval = evaluateImage(inp, 30, scales);
+        Image tmp = reduceEvaluationToImage(eval);
+        tmp.writePGM("tmpimg_sA.pgm");
+        
+        return 0;
+    }
+#endif
+    
     
     Database DTB("evolution.database", (argc == 2 ? NULL : argv[2]));
     Result res = DTB.query(argv[1], (argc == 2 ? NULL : argv[2]));
