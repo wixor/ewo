@@ -173,37 +173,37 @@ Przedstawimy tutaj zarówno eksperymenty udane jak również nieudane, aby wyci�
 Poniżej przedstawiam zestaw parametrów, które możemy modyfikować.
 
 \begin{tabular}{l|l|l}
-nazwa & dom. wartość & znaczenie \\
+parametr                & wartość & znaczenie \\
 \hline
-threads & 2 & ilość wątków, na których działa program \\
+\texttt{threads}        & 2     & ilość wątków, na których działa program \\
 \hline
-poiSteps & 16 & skok funkcji gradientu od kąta \\
-poiScales & 1,3,8 & skale gradientów \\
-poiCount & 60 & ilość punktów charakterystycznyc (POI) \\
-poiThreshold & 30 & próg poniżej którego nie uznajemy punktu za POI \\
+\texttt{poiSteps}       & 16    & skok funkcji gradientu od kąta \\
+\texttt{poiScales}      & 1,3,8 & skale gradientów \\
+\texttt{poiCount}       & 60    & ilość punktów charakterystycznych (POI) \\
+\texttt{poiThreshold}   & 30    & próg poniżej którego nie uznajemy punktu za POI \\
 \hline
-populationSize & 400 & wielkość populacji \\
-survivalRate & .8 & współczynnik przetrwania \\
-stopCondParam & 40 & wartość K używana w warunku zakończenia \\
-maxGeneration & 200 & maksymalna ilość pokoleń \\
+\texttt{populationSize} & 400   & wielkość populacji \\
+\texttt{survivalRate}   & .8    & współczynnik przetrwania \\
+\texttt{stopCondParam}  & 40    & wartość K używana w warunku zakończenia \\
+\texttt{maxGeneration}  & 200   & maksymalna ilość pokoleń \\
 \hline
-translateInit & 0.5 & początkowy rozrzut translacji w inicjowaniu populacji \\
-rotateInit & 6.283 & początkowy rozrzut rotacji w inicjowaniu populacji \\
-scaleInit & 4 & początkowy rozrzut skali w inicjowaniu populacji \\
+\texttt{translateInit}  & 0.5   & początkowy rozrzut translacji\\
+\texttt{rotateInit}     & 6.283 & początkowy rozrzut rotacji\\
+\texttt{scaleInit}      & 4     & początkowy rozrzut skali \\
 \hline
-translateProp & .03 & prawdop. domnożenia przez translację (w mutacji) \\
-rotateProp & .03 & prawdop. domnożenia przez obrót (w mutacji) \\
-scaleProp & .03 & prawdop. domnożenia przez skalowanie (w mutacji) \\
-flipProp & .05 & prawdop. odbicia względem prostej (w mutacji) \\
+\texttt{translateProp}  & .03   & prawdop. translacji podczas mutacji \\
+\texttt{rotateProp}     & .03   & prawdop. obrotu podczas mutacji \\
+\texttt{scaleProp}      & .03   & prawdop. skalowania podczas mutacji \\
+\texttt{flipProp}       & .05   & prawdop. odbicia względem prostej podczas mutacji \\
 \hline
-translateDev & .5 & odchylenie w losowaniu translacji (w mutacji) \\
-rotateDev & .05 & odchylenie w losowaniu obrotu (w mutacji) \\
-scaleDev & .05 & odchylenie w losowaniu skalowania (w mutacji) \\
-originDev & 0.3 & rozrzut przy wyborze punktu srodka obrotu i skali \\
+\texttt{translateDev}   & .5    & odchylenie w losowaniu translacji (w mutacji) \\
+\texttt{rotateDev}      & .05   & odchylenie w losowaniu obrotu (w mutacji) \\
+\texttt{scaleDev}       & .05   & odchylenie w losowaniu skalowania (w mutacji) \\
+\texttt{originDev}      & 0.3   & rozrzut przy wyborze punktu srodka obrotu i skali \\
 \hline
-deMatingProp & 0.8 & prawdop. krzyżowania DE \\
-deMatingCoeff & 0.1 & współczynnik przy krzyżowaniu DE \\
-deMatingDev & 0.05 & rozrzut powyższego \\
+\texttt{deMatingProp}   & 0.8   & prawdop. krzyżowania DE \\
+\texttt{deMatingCoeff}  & 0.1   & współczynnik przy krzyżowaniu DE \\
+\texttt{deMatingDev}    & 0.05  & rozrzut powyższego \\
 \end{tabular}
 
 
@@ -243,15 +243,6 @@ paprika, fruits (-13.042226)
 pear, fruits (-13.062563) (działa)
 
 
-
-
-\begin{figure}\centering
-\subfloat[Jabłko]{\includegraphics[width=5cm,keepaspectratio=true]{./apple-mod-pois.png}}
-\subfloat[Wisienki]{\includegraphics[width=5cm,keepaspectratio=true]{./cherries-pois.png}}
-\subfloat[Trójliterówka]{\includegraphics[width=5cm,keepaspectratio=true]{./jeb-pois.png}}
-\caption{Wybrane obrazy testowe}
-\end{figure}
-
 \begin{figure}\centering
 \footnotesize\include{applemod-vs-fruits}\vspace{-2em}
 \normalsize\caption{Dopasowanie owoców (\texttt{fruits}) do obróconego jabłka (\texttt{applemod}); uśrednione wyniki z dziesięciu uruchomień programu.}
@@ -287,7 +278,7 @@ zazwyczaj dostępne w pakiecie \texttt{libgtk2.0-dev} lub podobnym. Aby skompilo
 W wyniku jego wykonania powinien powstać plik wykonywalny o nazwie \texttt{evolution}. Program przyjmuje dwa parametry, plik z obrazkiem-zapytaniem oraz
 nazwę grupy obrazków z bazy danych. Przykładowe wywołanie może zatem wyglądać następująco:
 \begin{verbatim}./evolution fruits/apple-mod.pgm fruits\end{verbatim}
-Powyższe polecenie powoduje porównanie obrazka zawartego w pliku \texttt{fruits/apple-mod.pgm} do wszystkich obrazków z kategorii \texttt{fruits}.
+Powyższe polecenie powoduje porównanie obrazka \texttt{fruits/apple-mod.pgm} do wszystkich obrazków z kategorii \texttt{fruits}.
 Kategorie są opisane w pliku \texttt{evolution.database} i można je edytować. Gdy program otrzymuje obraz do analizy po raz pierwszy, niezbędne jest
 wyszukanie punktów charakterystycznych. Jest to długotrwała czynność (może trwać nawet pół minuty dla jednego obrazka), jednak znalezione punkty
 charakterystyczne są zapisywane na dysk i przy kolejnych uruchomieniach program będzie korzystał z obliczonych wcześniej danych. Program wczytuje
