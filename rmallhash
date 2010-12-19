@@ -1,0 +1,8 @@
+#!/bin/bash
+for file in `ls digs/`; do ./rmhash digs/ $file; done
+for file in `ls text/`; do ./rmhash text/ $file; done
+for file in `ls fruits/`; do ./rmhash fruits/ $file; done
+for file in `ls geom/`; do ./rmhash geom/ $file; done
+for file in `ls noise/`; do ./rmhash noise/ $file; done
+
+
