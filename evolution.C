@@ -509,10 +509,6 @@ void Population::mutation(Agent *a)
         a->scale(-1, 1, rx, ry);
         a->rotate(-rangle, rx, ry);
     }
-    /*if(Random::maybe(cfgFlipProp))
-        a->scale(1, -1,
-                 Random::gaussian(known->originX, cfgOriginDev * w),
-                 Random::gaussian(known->originY, cfgOriginDev * h));*/
 }
 
 /* --- differential evolution mating */
@@ -525,21 +521,18 @@ void Population::deMating(Agent *a, const Agent *p, const Agent *q, const Agent 
 
 bool Population::stopWLOG(const std::vector<float>& v)
 {
-    const int param = cfgStopCondParam;
-    if (v.size() < 2*param) return false;
-    /* jesli przez ostatnie 50 pokolen nie stalo sie nic ciekawszego niz podczas poprzednich 50 */
+    const int K = cfgStopCondParam;
+    if ((int)v.size() < 2*K) return false;
+    /* jesli przez ostatnie K pokolen nie stalo sie nic ciekawszego niz podczas poprzednich K */
     float min1 = 1e10f, min2 = 1e10f;
     
-    for (int i=v.size()-1; i>=(int)(v.size()-param); i--)
+    for (int i=v.size()-1; i>=(int)(v.size()-K); i--)
         min1 = std::min(min1, -v[i]);
     
-    for (int i=v.size()-param-1; i >= 0 && i>=(int)(v.size()-2*param); i--)
+    for (int i=v.size()-K-1; i >= 0 && i>=(int)(v.size()-2*K); i--)
         min2 = std::min(min2, -v[i]);
     
-    // debug("  last 50: %f, not-so-last 50: %f\n", min1, min2);
     if (min1 >= min2) return true;
-    if (min1 < min2) return false;
-    // if (min1 > min2) { debug("warning: unstable evolution convergence!\n"); return 0.0f; }
     return false;
 }
     
@@ -581,8 +574,6 @@ Agent Population::evolve()
             CairoImage *diffImCanvas = diffIm.getCanvas();
             Composite::difference(known->compimg, *alien->raw, pop[0].M, diffImCanvas);
             diffIm.putCanvas();
-
-            if (gencnt % 20 == 0) debug("%d %f\n", gencnt, pop[0].target);
         }
         bestValues.push_back(pop[0].target);
         if (bestEver.target < pop[0].target)
@@ -605,7 +596,6 @@ Agent Population::evolve()
         
         if (stopWLOG(bestValues) || gencnt >= cfgMaxGeneration) break;
     }
-    debug("there's no point going further. stopping\n");
     debug("best score was %.6f\n", bestEver.target);
     return bestEver;
 }
@@ -641,20 +631,16 @@ public:
         for (int i=0; i<size(); i++)
         {
             if (cat != NULL && strcmp(datable[i].category,cat) != 0) continue;
-            debug("okay, start comparing to %s\n", datable[i].name);
+            debug("start comparing to %s\n", datable[i].name);
             Agent A = Population(&datable[i], &alienDat).evolve();
             similars.push_back(std::make_pair(&datable[i], A));
             
-            // CairoImage bestIm(alienImg.getWidth(), alienImg.getHeight());
-            // Composite::transform(datable[i].compimg, A.M, &bestIm);
-            
+            /* this outputs best match to diff_{name}.pgm */
             CairoImage diffIm(alienImg);
             Composite::difference(datable[i].compimg, alienImg, A.M, &diffIm);
             Image dump(alienImg);
             diffIm.toImage(&dump);
-            char output[128] = "diff";
-            // strcat(output, );
-            strcat(output, "_");
+            char output[128] = "diff_";
             strcat(output, datable[i].name);
             strcat(output, ".pgm");
             dump.writePGM(output);
@@ -681,6 +667,7 @@ void Database::init(const char* filename, const char* onlycat)
     char cat[64];
     char path[256];
     char name[64];
+    debug("reading database\n");
     while (lrd.getline())
     {
         char *begin = lrd.buffer, *end = lrd.buffer+lrd.line_len;
@@ -693,7 +680,7 @@ void Database::init(const char* filename, const char* onlycat)
             for (char *read = begin; read != end && !isspace(*read); read ++) *(put++) = *read;
             *put = '\0';
             /* changes current category only */
-            debug("now current category is %s\n", cat);
+            debug("current category is %s\n", cat);
         }
         else
         {
@@ -711,14 +698,12 @@ void Database::init(const char* filename, const char* onlycat)
             for (; read != end && *read != '\n'; read ++) *(put++) = *read;
             *put = '\0';
             
-            if (strlen(name) == 0 || strlen(path) == 0) {
-                debug("empty name or path\n");
+            if (strlen(name) == 0 || strlen(path) == 0)
                 continue;
-            }
             /* now initialize data */
             
             if (onlycat != NULL && strcmp(onlycat, cat)) {
-                debug("we won't build %s now\n", name);
+                debug("there is no need to build %s now\n", name);
                 continue;
             }
             
@@ -747,20 +732,6 @@ int main(int argc, char *argv[])
         return 1;
     }
     
-#if 0
-    {
-        Image inp = Image::readPGM(argv[1]);
-        std::vector<float> scales(3, 1.f);
-        scales[1] = 3.f; scales[2] = 8.f;
-        Array2D<float> eval = evaluateImage(inp, 30, scales);
-        Image tmp = reduceEvaluationToImage(eval);
-        tmp.writePGM("tmpimg_sA.pgm");
-        
-        return 0;
-    }
-#endif
-    
-    
     Database DTB("evolution.database", (argc == 2 ? NULL : argv[2]));
     Result res = DTB.query(argv[1], (argc == 2 ? NULL : argv[2]));
     
@@ -770,26 +741,4 @@ int main(int argc, char *argv[])
         printf("%s, %s (%f)\n", res.tab[i]->name, res.tab[i]->category, res.value[i]);
     
     return 0;
-    
-    Image knownImg = Image::readPGM(argv[1]),
-          alienImg = Image::readPGM(argv[2]);
-          
-/*    Image diff = renderGaussianDifference(knownImg, alienImg, 2.0f, 2, false);
-    diff.writePGM("foo.pgm");
-    return 2; */
-          
-    Data knownDat = Data::build(argv[1]),
-         alienDat = Data::build(argv[2]);
-
-    Agent A = Population(&knownDat, &alienDat).evolve();
-    
-    return 0;
 }
-
-/* prague:
-eight, digits_text (-11.086623)
-pineapple, fruits (-11.507683)
-sex, 3letters (-11.587236)
-nine, digits_text (-11.823596)
-six, digits_text (-12.333274)
- */
