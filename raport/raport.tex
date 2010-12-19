@@ -32,7 +32,7 @@ Podejście zaproponowane w tej pracy polega na analizie samego kształtu obrazu,
 pikseli (z pominięciem informacji o kolorze).
 
 Przyjęliśmy następujące założenia: dana jest baza obrazów o zadanych nazwach (patrz rys. \ref{knownpics}). Każdy obraz, który chcemy rozpoznać
-(zapytanie) jest przyrównywane dp wszystkich obrazów z bazy. Spośród obrazów bazowych wybieramy te, których odległość do zapytania jest najmniejsza.
+(zapytanie) jest przyrównywane do wszystkich obrazów z bazy. Spośród obrazów bazowych wybieramy te, których odległość do zapytania jest najmniejsza.
 
 \section{Znajdowanie punktów charakterystycznych}
 Pierwszym etapem przetwarzania obrazu (pochodzącego z bazy danych lub będącego zapytaniem) jest znalezienie na nim punktów charakterystycznych.
@@ -48,12 +48,12 @@ Wartość tą przyjmujemy za ,,miarę ciekawości'' piksela.
 
 Intuicja stojąca za tym algorytmem jest prosta -- szukamy punktów, w otoczeniu których następuje zmiana jasności obrazu. Miarą zmiany jasności w danym
 kierunku jest gradient, zatem funkcja $F$ opisuje zmianę jasności obrazu we wszystkich kierunkach. Musimy jednak wziąć pod uwagę, że niektóre zmiany są
-jedynie lokalne. Aby wyeleminować szum, obliczamy średnią geometryczbą funkcję $F$ dla kilku skal (jest to funkcja $G$) -- jeżeli istotnie zachodzi
+jedynie lokalne. Aby wyeleminować szum, obliczamy średnią geometryczną funkcji $F$ dla kilku skal (jest to funkcja $G$) -- jeżeli istotnie zachodzi
 rozpatrywany piksel leży w obszarze silnych zmian, nastąpi rezonans, gdy natomiast zmiana jest lokalna, funkcja większej skali ją ,,wyciszy''.
 Według naszej całkowicie subiektywnej oceny skale 1,3,8 spradzają się najlepiej.
 
 Mając określoną miarę ciekawości każdego piksela, chcemy wybrać określoną liczbę punktów charakterystycznych, które będą opisywały kształt obiektu
-(liczba ta jest parametrem alogorytmu, najczęściej przyjmowaliśmy 50). Do tego celu zastosowaliśmy następujący algorytm: w każdym kolejnym kroku wybieramy
+(liczba ta jest parametrem alogorytmu, najczęściej przyjmowaliśmy 60). Do tego celu zastosowaliśmy następujący algorytm: w każdym kolejnym kroku wybieramy
 najciekawszy piksel na obrazku i dodajemy go do zbioru punktów interesujących. Nastepnie pewne jego otoczenie oznaczamy jako tabu i powtarzamy procedurę tak
 długo, aż wszystkie punkty zostaną tabu. Aby określić wielkość tabu, zastosowaliśmy heurystykę ,,im ciekawiej tym gęściej''. Mianowicie, wielkość tabu jest
 odwrotnie proporcjonalna do miary ciekawości punktu z pewnym współczynnikiem, który jest dobierany (za pomocą wyszukiwania binarnego) tak, aby ostateczny
@@ -85,7 +85,7 @@ Za miarę podobieństwa dwóch zbiorów punktów przyjmujemy
 Jednak aby znaleźć tę musimy znaleźć przekształcenie minimalizujące wartość $\dist$. I tutaj wkracza ewolucja. 
 
 \section{Ewolucja}
-
+ 
 Naszymi osobnikami będą macierze afiniczne, czyli macierze postaci
 $\begin{pmatrix}
 \star & \star & \star \\
@@ -217,13 +217,13 @@ parametr                & wartość & znaczenie \\
 
 Przeprowadzane eksperymenty podzielono na kilka grup: rozpoznawanie owoców, cyfr, słów trzyliterowych oraz obrazków bardzo zaszumionych.
 Pojedyńczy eksperyment polega na ustaleniu grupy obrazków bazowych (rzędu 10 - 20), wybraniu obrazka do zapytania, który jest podobny do
-któregoś z bazowych a następnie uruchomieniu algorytmu i wypisaniu pięciu najbardziej podobnych obrazków bazowych wraz z ich odległościami.
+któregoś z bazowych, a następnie uruchomieniu algorytmu i wypisaniu pięciu najbardziej podobnych obrazków bazowych wraz z ich odległościami.
 Na tej podstawie staramy się okreslić, czy program rzeczywiście udzielił poprawnych odpowiedzi. Przedstawimy tutaj zarówno eksperymenty udane
 jak i nieudane, aby wyciągnąć kilka wniosków na przyszłość.
 
 \subsection{Szukanie jabłka wśród owoców}
 Prosty, ale ważny test, który dobrze ilustruje działanie programu. Baza owoców zawiera zdjęcia pojedynczej wiśni, podwójnych wisienek, banana, 
-jabłka, ananasa, porcji arbuza, papryki i gruszku. Zapytaniem jest identyczne jak w bazie jabłko, poddane jedynie obrotowi i przesunięciu.
+jabłka, ananasa, porcji arbuza, papryki i gruszki. Zapytaniem jest identyczne jak w bazie jabłko, poddane jedynie obrotowi i przesunięciu.
 Oczekiwanym przez nas wynikiem jest zwrócenie przez algorytm listy najbardziej podobnych owoców z jabłkiem na szczycie listy i odległością jak
 najbliższą zera. Technicznie rzecz biorąc istnieje przekształcenie afiniczne, które perfekcyjnie przekształca jabłko z bazy danych na jabłko z
 zapytania. Jednak algorytm nie porównuje bezpośrednio obrazków, a jedynie ich punkty charakterystyczne. Ponieważ algorytm wyszukiwania punktów
@@ -258,8 +258,8 @@ niebieskimi punktami -- wisienek z zapytania (z listkiem).
 
 \paragraph{Gruszka}
 W tym eksperymencie będziemy porównywać zdjęcie gruszki do bazy owoców. Oczywiście, oczekujemy, że najbliższym owocem okaże się także gruszka.
-Ten eksperyment jest prosty, gdyż gruszki są do siebie podobne. Wyniki, jak widać, są zgodne z oczekiwaniami. Co więcej, całkiem dobrze do
-gruszki dopasowała się papryka. Dopasowania te przedstawiają rysunki \ref{pear} oraz \ref{paprika}.
+Ten eksperyment jest dość prosty, gdyż oba obrazki są do siebie podobne i w przestrzeni poszukiwań jest tylko jedno silne maksimum lokalne. 
+Wyniki, jak widać, są zgodne z oczekiwaniami. Co więcej, całkiem dobrze do gruszki dopasowała się papryka. Dopasowania te przedstawiają rysunki \ref{pear} oraz \ref{paprika}.
 \begin{verbatim}
 pear, fruits (-16.697315)
 paprika, fruits (-18.802341)
@@ -274,7 +274,7 @@ rozłożonych punktów charakterystycznych. Jednak kształt ten jest też bardzo
 charakterystyczne dwóch różnych zdjęć mogą się bardzo istotnie różnić. Z drugiej strony, w bazie danych nie znajduje się żaden owoc choć trochę
 podobny do ananasa (nie będący ananasem), zatem są nadzieje, że eksperyment powiedzie się. Otrzymane wyniki pokazują, że istotnie najlepsze
 dopasowanie otrzymano dla ananasa, jednak odległość do kolejnego obrazu (melona) jest bardzo niewielka. Co więcej, program dopasował ananasy...
- do góry nogami! Dopasowanie to przedstawiono na rysunku \ref{pineapple}. Kolorem czerwonym zaznaczono punkty charakterystyczne ananasa z bazy danych.
+do góry nogami! Dopasowanie to przedstawiono na rysunku \ref{pineapple}. Kolorem czerwonym zaznaczono punkty charakterystyczne ananasa z bazy danych.
 \begin{verbatim}
 pineapple, fruits (-11.685663)
 watermelon, fruits (-12.371205)
@@ -294,7 +294,7 @@ pear, fruits (-13.062563)
 \subsection{Rozpoznawanie trójliterówek}
 
 Kolejną grupą eksperymentów, którymi zajmiemy się w tym raporcie, będzie próba dopasowania tych samych słów (trzyliterowych), ale napisanych inną czcionką.
-Wbrew pozorom, nie jest to zadanie łatwe -- na rozkład POI w bardzo dużym stopniu wpływa grubości linii oraz kąta nachylenia pisma. Okazuje się jednak, że
+Wbrew pozorom, nie jest to zadanie łatwe -- na rozkład POI w bardzo dużym stopniu wpływa grubości linii oraz kąt nachylenia pisma. Okazuje się jednak, że
 program przechodzi większość nieskomplikowanych testów poprawnie. Baza słów wygląda zawiera następujące trójliterówki napisane czcionką Sans:
 car cut bra sex six jeb map rap two bar sut.
 
@@ -311,9 +311,9 @@ rap, 3letters (-14.585580)
 \end{verbatim}
 
 \paragraph{Słowo jeb}
-W tym teście zapytaniem jest słowo jeb, obrócone o 90 stopni napisane pochyłą czcionką. Nasz algorytm znajduje poprawne dopasowanie (rys. \ref{jeb}), lecz
-ale wyższą wartość funkcji celu osiąga ma słowo sex (rys. \ref{jeb_sex}). Jednak wyniki są jednak zaskakujące. Udało nam się wychwycić słabą stronę algorytmu:
-kształt jest inny, jednak przypadkowo dopasował się wyjątkowo dobrze. Niestety, trudno takich błędów się pozbyć. W tym teście nie uzyskaliśmy optymalnego
+W tym teście zapytaniem jest słowo jeb, obrócone o 90 stopni napisane pochyłą czcionką. Nasz algorytm znajduje poprawne dopasowanie (rys. \ref{jeb}), 
+lecz wyższą wartość funkcji celu osiąga słowo sex (rys. \ref{jeb_sex}). Jednak wyniki są zaskakujące. Udało nam się wychwycić słabą stronę algorytmu:
+kształt jest inny, a przypadkowo dopasował się wyjątkowo dobrze. Niestety, trudno takich błędów się pozbyć. W tym teście nie uzyskaliśmy optymalnego
 wyniku, jednak oczekiwane słowo znajduje się w pierwszej trójce propozycji.
 \begin{verbatim}
 sex, 3letters (-10.982061)
@@ -332,14 +332,43 @@ cut, 3letters (-11.646334)
 
 \subsection{Rozpoznawanie obrazów zaszumionych}
 Wykonaliśmy też kilka eksperymentów z obrazkami zaszumionymi. Te jednak okazały się całkowitą klapą. Z powodu sporego szumu tła zawodzi wyszukiwanie punktów charakterystycznych.
-Już na obrazku po
+Już na obrazku na Rysunku 2 (e) jest kilka punktów, które nie powinny się pojawić (nie leżące na krawędzi interesującego nas czarnego obszaru). 
+Niestety, szum tła z punktu widzenia algorytmu jest istotny -- dopiero ludzi mózg jest w stanie dostrzec, że tak naprawdę można go zignorować i to co jest istotne, to jedynie czarne obszary.
 
+\subsection{Rozpoznawanie geometrii na przykładzie poczwórnych pasków}
+W tym paragrafie omówimy kilka benchmarków geometrycznych.
+W bazie obrazków znajdują się takie figury jak: gwiazda 4-ramienna, 3 paski, 4 paski, 5 pasków, kwadrat 4 na 4 z kropek, kwadrat pełen, kwadrat z wyciętym środkiem.
+Jednym z nich jest prosta próba dopasowania kwadratu do rombu - szczegółowo zostanie ona przedstawiona w rozdziale następnym, teraz skupmy się na rzeczy trudniejszej.
+Przeprowadziliśmy testy polegające na odpowiadanie na zapytania będące również paskami, jednak narysowanymi w inny sposób.
+Dla uwypuklenia naszej argumentacji, w tym miejscu zmieniliśmy parametr cfgPOIcount z 60 na 50.
+Test ten działa ``w kratkę''; mamy tutaj bowiem do czynienia z dwoma silnymi maksimami lokalnymi: paski nakrywające się (poprawnie) i paski ustawione prostopadle do siebie (niepoprawnie).
+W większości przypadków algorytm zwraca poprawną odpowiedź:
+\begin{verbatim}
+four_strips, geometry (-16.995546)
+sixteen_dots, geometry (-17.608957)
+five_strips, geometry (-21.416338)
+star4, geometry (-22.383705)
+three_strips, geometry (-23.276367)
+\end{verbatim}
 
+Niestety, zdarza się także, że uda nam się trafić w to drugie maksimum. Wówczas wynik działania wygląda mniej więcej tak:
+\begin{verbatim}
+sixteen_dots, geometry (-17.669998)
+five_strips, geometry (-21.649561)
+four_strips, geometry (-21.770014)
+three_strips, geometry (-22.251009)
+star4, geometry (-23.067333)
+\end{verbatim}
+Poprawne i niepoprawne dopasowania pokazane są na \ref{strips4good} oraz \ref{strips4bad}. Zjawisko staje się bardziej zrozumiałe, jeśli spojrzymy na punkty charakterystyczne --
+\ref{strips4_POI}. Na pierwszy rzut oka nie widać, że przedstawiają cztery pionowe paski - bardziej 50 punktów rozrzuconych dość równomiernie po obrazie, ułożonych w kwadrat.
+Ponieważ dla poziomych pasków rozkład punktów charakterystycznych wygląda podobnie, jest to również silne maksimum lokalne.
 
-
-\subsection{Rozpoznawanie geometrii}
-tutaj działające square vs. romb oraz niedziałające stripes / dots
-
+\begin{figure}\centering
+\subfloat[źle]{\includegraphics[width=6cm,keepaspectratio=true]{./bad-diff-4strips.png}\label{strips4bad}}\hspace{5mm}
+\subfloat[dobrze]{\includegraphics[width=6cm,keepaspectratio=true]{./good-diff-4strips.png}\label{strips4good}}\\
+\subfloat[POI dla \texttt{strips4\_2}]{\includegraphics[width=6cm,keepaspectratio=true]{./4strips-pois.png}\label{strips4_POI}}\\
+\caption{Dopasowania \texttt{strips4} do \texttt{strips4\_2}}
+\end{figure}
 
 \section{Wpływ wartości parametrów algorytmu na wyniki}
 
@@ -408,6 +437,15 @@ z prostoty testu.
 \normalsize\caption{Wpływ współczynnika przetrwania na ewolucję.}\label{surv}
 \end{figure}
 
+\section{Posumowanie: wnioski końcowe i perspektywy rozwoju}
+Nasz algorytm bezbłędnie działa na testach benchmarkowych, doskonale radzi sobie też z testami, w których obrazek z zapytania jest bardzo podobny do któregoś z bazowych.
+W przypadku testów, na których nie istnieje dobre przekształcenie obrazka bazowego na obrazek z zapytania, algorytm bardzo dobrze radzi sobie z testami, 
+w których nie ma wielu silnych minimów lokalnych. W przypadku testów trudniejszych nie jest niezawodny, ale niejednokrotnie zaskoczył nas poprawnością wyniku i ``błyskotliwością'' dopasowania.
+Nie należy jednak oczekiwać zbyt wiele - w końcu założeniem wyjściowym było rozpoznawanie jedynie kształtów.
+Niestety, ma on wiele wad, które widać po wynikach eksperymentów
+
+
+
 \section{Uwagi implementacyjne}
 
 Program wymaga systemu operacyjnego GNU/Linux. Do jego kompilacji niezbędne są, poza standardowymi narzędziami, pliki nagłówkowe biblioteki GTK+,
@@ -422,7 +460,7 @@ charakterystyczne są zapisywane na dysk i przy kolejnych uruchomieniach program
 obrazy w formacie \texttt{pgm}, wraz z kodem źródłowym dostarczane są przykładowe obrazy (w katalogach \texttt{digs}, \texttt{fruits}, \texttt{geom},
 \texttt{noise} oraz \texttt{text}). Uwaga: program nie potrafi wczytać obrazów, które zawierają komentarze. Pliki \texttt{pgm} tworzone przez program
 GIMP zawierają komentarz (i nie jest nam znana żadna metoda skłonienia GIMPa do nie umieszczania komentarza w plikach \texttt{pgm}). Wraz z kodem
-źródłowym dostarczono skrypt \texttt{rmhash}, który usuwa komentarze z plików \texttt{pgm}. Parametry programu decydujące o działaniu algortymu
+źródłowym dostarczono skrypt \texttt{rmallhash}, który usuwa komentarze z plików \texttt{pgm}. Parametry programu decydujące o działaniu algortymu
 zostały umieszczone w pliku \texttt{evolution.cfg}, który jest wczytywany przez program podczas startu.
 
 Kod źródłowy podzielony jest na kilka plików. Główna część programu znajduje się w pliku \texttt{evolution.C}. Plik \texttt{poi.C} zawiera algorytm
