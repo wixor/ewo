@@ -139,7 +139,9 @@ Array2D<float> evaluateImage(const Image &src, int steps, const std::vector<floa
     
     std::vector<Array2D<float> > globalProfile(steps, Array2D<float>(w,h));
     std::vector<Array2D<float> > currentProfile(steps, Array2D<float>(w,h));
-
+    
+    Image tmpimg(w, h);
+    
     for(int i=0; i<steps; i++)
         for(int y=0; y<h; y++)
             for(int x=0; x<w; x++)
@@ -171,6 +173,20 @@ Array2D<float> evaluateImage(const Image &src, int steps, const std::vector<floa
         }
         
         c.wait();
+        
+        
+        for (int y=0; y<h; y++)
+            for (int x=0; x<w; x++)
+            {
+                float minf = 1000.0f, maxf = -1000.0f;
+                for (int i=0; i<steps; i++)
+                    minf = std::min(minf, currentProfile[i][y][x]),
+                    maxf = std::max(maxf, currentProfile[i][y][x]);
+                tmpimg[y][x] = std::min(255, std::max(1, (int)abs(maxf-minf)));
+            }
+        static char filename[256] = "tmpimg_s#.pgm";
+        filename[8] = scales[s] + '0';
+        tmpimg.writePGM(filename);
         
         for(int i=0; i<steps; i++)
             for(int y=0; y<h; y++)
