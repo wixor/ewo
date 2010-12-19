@@ -286,7 +286,7 @@ std::vector<POI> findPOIs(const Array2D<float> &eval, float threshold, int count
         else
             upval = midval;
     }
-    debug("found %d pois (looking for %d). threshold = %f, tabuParam = %f\n", ret.size(), count, threshold, midval);
+    debug("found %zu pois (looking for %d). threshold = %f, tabuParam = %f\n", ret.size(), count, threshold, midval);
     
     return ret;
 }
