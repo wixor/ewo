@@ -74,7 +74,6 @@ void parse_config(const char *filename, const struct config_var *vars)
             if(strcasecmp(c->name, begin) == 0)
                 break;
             
-        debug("found config with name %s and value %s\n", c->name, value);
         /* store configuration value */
         switch(c->type)
         {
