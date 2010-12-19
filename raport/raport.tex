@@ -380,7 +380,8 @@ charakterystyczne są zapisywane na dysk i przy kolejnych uruchomieniach program
 obrazy w formacie \texttt{pgm}, wraz z kodem źródłowym dostarczane są przykładowe obrazy (w katalogach \texttt{digs}, \texttt{fruits}, \texttt{geom},
 \texttt{noise} oraz \texttt{text}). Uwaga: program nie potrafi wczytać obrazów, które zawierają komentarze. Pliki \texttt{pgm} tworzone przez program
 GIMP zawierają komentarz (i nie jest nam znana żadna metoda skłonienia GIMPa do nie umieszczania komentarza w plikach \texttt{pgm}). Wraz z kodem
-źródłowym dostarczono skrypt \texttt{rmhash}, który usuwa komentarze z plików \texttt{pgm}.
+źródłowym dostarczono skrypt \texttt{rmhash}, który usuwa komentarze z plików \texttt{pgm}. Parametry programu decydujące o działaniu algortymu
+zostały umieszczone w pliku \texttt{evolution.cfg}, który jest wczytywany przez program podczas startu.
 
 Kod źródłowy podzielony jest na kilka plików. Główna część programu znajduje się w pliku \texttt{evolution.C}. Plik \texttt{poi.C} zawiera algorytm
 wyszukiwania punktów charakterystycznych. Plik i \texttt{image.C} oraz \texttt{composite.C} zawierają kod operacji na obrazkach. Pliki \texttt{gui.C}
