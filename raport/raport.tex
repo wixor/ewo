@@ -439,22 +439,17 @@ z prostoty testu.
 \end{figure}
 
 \section{Wnioski końcowe i perspektywy rozwoju}
-Nasz algorytm bezbłędnie działa na testach benchmarkowych, doskonale radzi sobie też z testami, w których obrazek z zapytania jest bardzo podobny do któregoś z bazowych.
-W przypadku testów, na których nie istnieje dobre przekształcenie obrazka bazowego na obrazek z zapytania, algorytm bardzo dobrze radzi sobie z testami, 
-w których nie ma wielu silnych minimów lokalnych. W przypadku testów trudniejszych nie jest niezawodny, ale niejednokrotnie zaskoczył nas poprawnością wyniku i ``błyskotliwością'' dopasowania.
-Nie należy jednak oczekiwać zbyt wiele - w końcu założeniem wyjściowym było rozpoznawanie jedynie kształtów.
-Niestety, ma on wiele wad, które widać po wynikach eksperymentów. Po pierwsze, funkcja porównująca obrazki jest dosyć prymitywna i niejednokrotnie przypadkowo dopasowuje nam punkty 
-(jak to działo się w przypadku pasków bądź pary słów jeb, sex).
-Po drugie, co przede wszystkim, czas działania tego programu jest spory i, przede wszystkim, linowo zależny od ilości danych obrazów, 
-co wyklucza jego praktyczne zastosowanie i czyni go bezużytecznym w momencie, w którym baza obrazów jest spora bądź zapytań jest dużo.
-Te wnioski trzeba wziąć pod uwagę, jeżeli chcemy rozwijać ten projekt. A jest po co - zastosowań pomysłów wprowadzonych powyżej jest mnóstwo.
-Rozpoznawanie tekstu z obrazu (OCR), wyszukiwanie podobnych obrazów w sieci (o ile użytkownik zawęzi obszar poszukiwań do pewnej kategorii), automatyczne wyzwalanie migawki w momencie, 
-gdy pojawi się w kadrze dany obiekt.
-Jasnym jest, że aby być w stanie zastosować program do powyższych celów, należy wprowadzić choćby częściowe indeksowanie, żeby być w stanie nie sprawdzać wszsystkich bazowych, 
-a także znacznie zwiększyć niezawodność -- co w praktyce oznacza wzięcie pod uwagę waloru obrazu. 
-Jednakże, pomimo naszych krytycznych uwag na temat naszej pracy, jesteśmy pewni że nasze pomysły zastosowane w tym projekcie okażą się praktyczne i będzie je można wprowadzić w życie
-w poważnych zastosowaniach. Ponadto, nauczyliśmy się bardzo dużo na temat natury tego problemu i zmierzyliśmy się z jego złośliwościami, a przede wszystkim - zyskaliśmy ogromną wiedzę na temat
-ewolucji i jej możliwości.
+Nasz algorytm bezbłędnie działa na testach benchmarkowych, doskonale radzi sobie też z testami, w których obrazek z zapytania jest bardzo podobny
+do któregoś z bazowych. W przypadku testów, na których nie istnieje dobre przekształcenie obrazka bazowego na obrazek z zapytania, algorytm bardzo
+dobrze radzi sobie z testami, w których nie ma wielu silnych maksimów lokalnych. W przypadku testów trudniejszych nie jest niezawodny, ale
+niejednokrotnie zaskoczył nas poprawnością wyniku i ,,błyskotliwością'' dopasowania. Nie należy jednak oczekiwać zbyt wiele -- w końcu założeniem
+wyjściowym było rozpoznawanie jedynie kształtów. Niestety, ma on wiele wad, które widać po wynikach eksperymentów. Po pierwsze, funkcja porównująca
+obrazki jest dosyć prymitywna i niejednokrotnie przypadkowo dopasowuje nam punkty (jak to działo się w przypadku pasków bądź pary słów jeb, sex).
+Po drugie, czas działania programu jest spory i, co gorsza, linowo zależny od ilości danych obrazów, co czyni go bezużytecznym w momencie, w którym
+baza obrazów jest spora bądź zapytań jest dużo. Te wnioski trzeba wziąć pod uwagę, jeżeli chcemy rozwijać ten projekt. A jest po co -- zastosowań
+automatycznego rozpoznawania obrazu jest mnóstwo, od rozpoznawania tekstu z obrazu (OCR), przez wyszukiwanie podobnych obrazów w sieci, do automatycznego
+wyzwalania migawki w momencie, gdy pojawi się w kadrze dany obiekt. Jasnym jest, że aby być w stanie zastosować program do powyższych celów, należy
+wprowadzić choćby częściowe indeksowanie, żeby być w stanie nie sprawdzać wszsystkich obrazów bazowych, a także znacznie zwiększyć niezawodność.
 
 \section{Uwagi implementacyjne}
 
@@ -470,7 +465,7 @@ charakterystyczne są zapisywane na dysk i przy kolejnych uruchomieniach program
 obrazy w formacie \texttt{pgm}, wraz z kodem źródłowym dostarczane są przykładowe obrazy (w katalogach \texttt{digs}, \texttt{fruits}, \texttt{geom},
 \texttt{noise} oraz \texttt{text}). Uwaga: program nie potrafi wczytać obrazów, które zawierają komentarze. Pliki \texttt{pgm} tworzone przez program
 GIMP zawierają komentarz (i nie jest nam znana żadna metoda skłonienia GIMPa do nie umieszczania komentarza w plikach \texttt{pgm}). Wraz z kodem
-źródłowym dostarczono skrypt \texttt{rmallhash}, który usuwa komentarze z plików \texttt{pgm}. Parametry programu decydujące o działaniu algortymu
+źródłowym dostarczono skrypt \texttt{rmhash}, który usuwa komentarze z plików \texttt{pgm}. Parametry programu decydujące o działaniu algortymu
 zostały umieszczone w pliku \texttt{evolution.cfg}, który jest wczytywany przez program podczas startu.
 
 Kod źródłowy podzielony jest na kilka plików. Główna część programu znajduje się w pliku \texttt{evolution.C}. Plik \texttt{poi.C} zawiera algorytm
