@@ -21,6 +21,10 @@ struct POI : public Point
     } 
 };
 
+inline POI operator*(const Matrix &M, const POI &p) {
+    return POI(M * (Point)p, p.val);
+}
+
 Array2D<float> evaluateImage(const Image &src, int steps, const std::vector<float> &scales);
 Image reduceEvaluationToImage(const Array2D<float> &eval);
 std::vector<POI> findPOIs(const Array2D<float> &eval, float threshold, int count, float param);

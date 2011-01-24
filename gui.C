@@ -86,16 +86,23 @@ void DisplaySlot::drawImage(CairoImage ci, const Matrix *m, bool difference)
 
 void DisplaySlot::drawDot(Point p, float d, rgba color)
 {
-    cairo_set_source_rgba(cr, color.r,color.g,color.b,color.a);
+    cairo_set_source_rgba(cr, 0,0,0,color.a);
     cairo_rectangle(cr, p.x-.5f*d, p.y-.5f*d, d,d);
+    cairo_set_source_rgba(cr, color.r,color.g,color.b,1.f);
+    cairo_rectangle(cr, p.x-.3f*d, p.y-.3f*d, .6f*d,.6f*d);
     cairo_fill(cr);
 }
 
 void DisplaySlot::drawDots(std::vector<Point> ps, float d, rgba color)
 {
-    cairo_set_source_rgba(cr, color.r,color.g,color.b,color.a);
+    cairo_set_source_rgba(cr, 0,0,0,color.a);
     for(int i=0; i<(int)ps.size(); i++)
         cairo_rectangle(cr, ps[i].x-.5f*d, ps[i].y-.5f*d, d,d);
+    cairo_fill(cr);
+
+    cairo_set_source_rgba(cr, color.r,color.g,color.b,1.f);
+    for(int i=0; i<(int)ps.size(); i++)
+        cairo_rectangle(cr, ps[i].x-.3f*d, ps[i].y-.3f*d, .6f*d,.6f*d);
     cairo_fill(cr);
 }
 

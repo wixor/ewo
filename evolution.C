@@ -4,6 +4,7 @@
 #include <cassert>
 #include <ctime>
 #include <ctype.h>
+#include <sys/stat.h>
 #include <vector>
 #include <string>
 #include <algorithm>
@@ -15,8 +16,11 @@
 #include "image.h"
 #include "config.h"
 
-
-#define debug(fmt, ...) fprintf(stderr, fmt, ## __VA_ARGS__)
+#define info(fmt, ...)  printf("   " fmt "\n", ## __VA_ARGS__)
+#define okay(fmt, ...)  printf(" + " fmt "\n", ## __VA_ARGS__)
+#define warn(fmt, ...)  printf("-- " fmt "\n", ## __VA_ARGS__)
+#define fail(fmt, ...)  printf("!! " fmt "\n", ## __VA_ARGS__)
+#define debug(fmt, ...) printf(".. " fmt "\n", ## __VA_ARGS__)
 
 /* ------------------------------------------------------------------------ */
 
@@ -123,9 +127,9 @@ class Data
     inline void findOrigin();
     inline void findPOIs();
 
-    static inline std::string makeCacheFilename(const std::string &filename);
+    static inline char *makeCacheFilename(const char *filename);
     inline uint32_t checksum() const;
-    inline bool readCached(const char *filename);
+    inline void readCached(const char *filename);
     inline void writeCache(const char *filename) const;
 
     struct cacheHdr {
@@ -137,39 +141,42 @@ class Data
     };
 
     inline Data() { }
+    void doBuild(const char *filename);
 
 public:
-    char name[64];
-    char category[64];
-    Image *raw;
+    Image raw;
     std::vector<POI> pois;
     int originX, originY; /* median of POIs */
     CairoImage caimg; /* image for gui */
 
-    static Data build(const char *filename);
+    static inline Data build(const char *filename) {
+        Data ret;
+        ret.doBuild(filename);
+        return ret;
+    }
 
     std::vector<POI> transformPOIs(const Matrix &M) const;
 };
 
-Data Data::build(const char *filename)
+void Data::doBuild(const char *filename)
 {
-    Data ret;
-    ret.raw = new Image(0,0);
-    (*ret.raw) = Image::read(filename);
+    raw = Image::read(filename);
 
-    if(!ret.readCached(filename)) {
-        ret.findPOIs();
-        ret.findOrigin();
-        ret.writeCache(filename);
+    try {
+        readCached(filename);
+    } catch(std::exception &e) {
+        warn("failed to read cache: %s", e.what());
+        findPOIs();
+        findOrigin();
+        writeCache(filename);
     }
-    ret.caimg = gui_upload(*ret.raw);
 
-    return ret;
+    caimg = gui_upload(raw);
 }
 
 void Data::findPOIs()
 {
-    Array2D<float> eval = ::evaluateImage(*raw, cfgPOISteps, cfgPOIScales);
+    Array2D<float> eval = ::evaluateImage(raw, cfgPOISteps, cfgPOIScales);
     pois = ::findPOIs(eval, cfgPOIThreshold, cfgPOICount, cfgPOITabuParam);
 }
 
@@ -189,18 +196,6 @@ void Data::findOrigin()
     originY = v[pois.size()/2];
 }
 
-std::string Data::makeCacheFilename(const std::string &filename)
-{
-    if(filename.size() < 4 || filename.compare(filename.size()-4, 4, ".pgm") != 0) {
-        fprintf(stderr, "WARNING: unknown image file extension\n");
-        return NULL;
-    }
-
-    std::string ret = filename;
-    ret[ret.size()-3] = 'd'; ret[ret.size()-2] = 'a'; ret[ret.size()-1] = 't';
-    return ret;
-}
-
 static inline uint32_t float2u32(float v) {
     union { float x; uint32_t y; } aa;
     aa.x = v;
@@ -208,7 +203,7 @@ static inline uint32_t float2u32(float v) {
 }
 uint32_t Data::checksum() const
 {
-    uint32_t ret = raw->checksum();
+    uint32_t ret = raw.checksum();
     ret ^= cfgPOISteps ^ cfgPOICount;
     ret ^= float2u32(cfgPOIThreshold);
     for(int i=0; i<(int)cfgPOIScales.size(); i++)
@@ -216,49 +211,60 @@ uint32_t Data::checksum() const
     return ret;
 }
 
-bool Data::readCached(const char *filename)
+char *Data::makeCacheFilename(const char *filename)
 {
-    FILE *f = fopen(makeCacheFilename(std::string(filename)).c_str(), "rb");
-    if(!f) {
-        fprintf(stderr, "failed to open cache file\n");
-        return false;
-    }
+    int len = strlen(filename);
+    assert(len >= 4);
+
+    char *ret = strdup(filename);
+    ret[len-4] = '.'; ret[len-3] = 'd'; ret[len-2] = 'a'; ret[len-1] = 't';
+    return ret;
+}
+void Data::readCached(const char *filename)
+{
+    char *cacheFilename = makeCacheFilename(filename);
+    FILE *f = fopen(cacheFilename, "rb");
+    free(cacheFilename);
+
+    if(!f) 
+        throw std::runtime_error("failed to open cache file");
 
     struct cacheHdr hdr;
     if(fread(&hdr, sizeof(hdr),1, f) != 1) {
-        fprintf(stderr, "WARNING: corrupted cache file header\n");
-        fclose(f); return false;
+        fclose(f);
+        throw std::runtime_error("truncated cache file header");
     }
 
     if(hdr.magic != cacheHdr::MAGIC) {
-        fprintf(stderr, "WARNING: invalid cache file magic (found %08x, expected %08x)\n", hdr.magic, cacheHdr::MAGIC);
-        fclose(f); return false;
+        fclose(f);
+        throw std::runtime_error("invalid cache file magic number");
     }
 
     if(hdr.checksum != checksum()) {
-        fprintf(stderr, "cache doesn't match image, propably stale cache file\n");
-        fclose(f); return false;
+        fclose(f);
+        throw std::runtime_error("cache file checksum mismatch");
     }
 
     pois.resize(hdr.poiCount);
     if(fread(&pois[0], sizeof(POI),hdr.poiCount, f) != hdr.poiCount) {
-        fprintf(stderr, "WARNING: failed to read POIs from cache\n");
-        pois.clear(); fclose(f); return false;
+        pois.clear(); fclose(f);
+        throw std::runtime_error("failed to read POIs");
     }
 
     originX = hdr.originX;
     originY = hdr.originY;
 
     fclose(f);
-
-    fprintf(stderr, "cache read successfully\n");
-    return true;
 }
 
 void Data::writeCache(const char *filename) const
 {
-    FILE *f = fopen(makeCacheFilename(std::string(filename)).c_str(), "wb");
-    if(!f) throw std::runtime_error("failed to write cache file");
+    char *cacheFilename = makeCacheFilename(filename);
+    FILE *f = fopen(cacheFilename, "wb");
+    free(cacheFilename);
+
+    if(!f) 
+        throw std::runtime_error("failed to write cache file");
 
     cacheHdr hdr;
     hdr.magic = cacheHdr::MAGIC;
@@ -273,7 +279,6 @@ void Data::writeCache(const char *filename) const
         throw std::runtime_error("failed to write cache file");
     }
 
-    fprintf(stderr, "cache written successfully\n");
     fclose(f);
 }
 
@@ -281,7 +286,7 @@ std::vector<POI> Data::transformPOIs(const Matrix &M) const
 {
     std::vector<POI> xfmd(pois.size());
     for(int i=0; i<(int)pois.size(); i++)
-        xfmd[i] = POI(M * pois[i], pois[i].val);
+        xfmd[i] = M * pois[i];
     return xfmd;
 }
 
@@ -299,13 +304,16 @@ public:
 
     virtual void draw()
     {
-        resize(data->raw->getWidth(), data->raw->getHeight());
+        if(!data)
+            return;
+
+        resize(data->raw.getWidth(), data->raw.getHeight());
         drawImage(data->caimg);
 
         std::vector<Point> ps(data->pois.size());
         for(int i=0; i<(int)data->pois.size(); i++)
             ps[i] = data->pois[i];
-        drawDots(ps,3, color);
+        drawDots(ps,6, color);
     }
 };
 
@@ -326,11 +334,13 @@ public:
 
     virtual void draw()
     {
-        struct timespec tstart, tend;
+        if(!known || !alien)
+            return;
 
-        clock_gettime(CLOCK_THREAD_CPUTIME_ID, &tstart);
+/*        struct timespec tstart, tend;
+        clock_gettime(CLOCK_THREAD_CPUTIME_ID, &tstart); */
 
-        resize(alien->raw->getWidth(), alien->raw->getHeight());
+        resize(alien->raw.getWidth(), alien->raw.getHeight());
         drawImage(alien->caimg);
         drawDifference(known->caimg, m);
         
@@ -344,20 +354,20 @@ public:
             ps[i] = m * known->pois[i];
         drawDots(ps,6, knownColor);
         
-        clock_gettime(CLOCK_THREAD_CPUTIME_ID, &tend);
+/*      clock_gettime(CLOCK_THREAD_CPUTIME_ID, &tend);
         long long p = 1000000000LL*tstart.tv_sec + tstart.tv_nsec,
                   q = 1000000000LL*tend.tv_sec   + tend.tv_nsec,
                   r = q-p;
-        printf("drawing took %d.%06d ms\n", (int)(r/1000000), (int)(r%1000000));
+        debug("drawing took %d.%06d ms", (int)(r/1000000), (int)(r%1000000)); */
     }
 };
 
 /* those are created statically, however they will only initialize
  * themselves upon first action, which must occur after gtk_gui_init. */
 
-static ImageDisplaySlot knownDS("known image", NULL, rgba(0,1,0,0.75)),
-                        alienDS("alien image", NULL, rgba(1,0,0,0.75));
-static FitDisplaySlot   bestDS("best fit", NULL, rgba(0,1,0,0.75), NULL, rgba(1,0,0,0.75));
+static ImageDisplaySlot knownDS("known image", NULL, rgba(0.1,1,0.1,0.5)),
+                        alienDS("alien image", NULL, rgba(1,0.3,0.1,0.5));
+static FitDisplaySlot   bestDS("best fit", NULL, rgba(0.1,1,0.1,0.5), NULL, rgba(1,0.3,0.1,0.5));
 
 /* ------------------------------------------------------------------------ */
 
@@ -365,9 +375,7 @@ class Agent
 {
 public:
     Matrix M; /* the transformation matrix */
-    float distance; /* point cloud distance */ 
-    float difference; /* image difference metric */
-    float target; /* target function, computed from the above */
+    float target; /* target function */
     float fitness; /* population-wide fitness factor */
 
     /* agents ordering */
@@ -425,6 +433,9 @@ class Population
     /* our lovely little things */
     std::vector<Agent> pop;
 
+    /* history record of best scores, one entry per generation */
+    std::vector<float> bestScores;
+
     /* population evaluation (multi-threaded) */
     class EvaluationJob : public AsyncJob
     {
@@ -443,7 +454,9 @@ class Population
     inline void makeRandom(Agent *a);
     inline void mutation(Agent *a);
     inline void deMating(Agent *a, const Agent *p, const Agent *q, const Agent *r);
-    inline static bool stopWLOG(const std::vector<float>& v);
+
+    /* one needs to know when to stop! */
+    inline bool terminationCondition() const;
 
 public:
     Population(const Data *known, const Data *alien);
@@ -473,13 +486,8 @@ void Population::EvaluationJob::run()
     const Data *alien = uplink->alien, *known = uplink->known;
 
     std::vector<POI> xformed = known->transformPOIs(agent->M);
-    agent->distance = -matchPOIs(xformed, alien->pois)
-                      -matchPOIs(alien->pois, xformed);
-    agent->distance /= alien->pois.size() + known->pois.size();
-
-    agent->difference = 0;//-Composite::difference(known->compimg, *alien->raw, agent->M);
-    
-    agent->target = agent->distance;
+    agent->target = -(matchPOIs(xformed, alien->pois) + matchPOIs(alien->pois, xformed)) /
+                     (alien->pois.size() + known->pois.size());
 }
 void Population::evaluate()
 {
@@ -525,7 +533,7 @@ int Population::roulette(int n)
         else
             y -= pop[i].fitness;
 
-    fprintf(stderr, "WARNING: roulette selection failed, residual %e\n", y);
+    warn("roulette selection failed, residual %e", y);
     return 0;
 }
 
@@ -534,8 +542,8 @@ void Population::makeRandom(Agent *a)
 {
     a->M = Matrix();
     a->translate(
-            Random::real(cfgTranslateInit) * known->raw->getWidth(),
-            Random::real(cfgTranslateInit) * known->raw->getHeight());
+            Random::real(cfgTranslateInit) * known->raw.getWidth(),
+            Random::real(cfgTranslateInit) * known->raw.getHeight());
     a->rotate(Random::real(cfgRotateInit),
             known->originX, known->originY);
     a->scale(1.f+Random::real(cfgScaleInit),1.f+Random::real(cfgScaleInit),
@@ -543,8 +551,8 @@ void Population::makeRandom(Agent *a)
 }
 void Population::mutation(Agent *a)
 {
-    float w = known->raw->getWidth(),
-          h = known->raw->getHeight();
+    float w = known->raw.getWidth(),
+          h = known->raw.getHeight();
 
     if(Random::maybe(cfgTranslateProp))
         a->translate(Random::gaussian(0, cfgTranslateDev) * w,
@@ -581,21 +589,17 @@ void Population::deMating(Agent *a, const Agent *p, const Agent *q, const Agent 
     a->M = p->M + (q->M - r->M) * factor;
 }
 
-bool Population::stopWLOG(const std::vector<float>& v)
+bool Population::terminationCondition() const
 {
     const int K = cfgStopCondParam;
-    if ((int)v.size() < 2*K) return false;
+    if ((int)bestScores.size() < 2*K)
+        return false;
+
     /* jesli przez ostatnie K pokolen nie stalo sie nic ciekawszego niz podczas poprzednich K */
-    float min1 = 1e10f, min2 = 1e10f;
-    
-    for (int i=v.size()-1; i>=(int)(v.size()-K); i--)
-        min1 = std::min(min1, -v[i]);
-    
-    for (int i=v.size()-K-1; i >= 0 && i>=(int)(v.size()-2*K); i--)
-        min2 = std::min(min2, -v[i]);
-    
-    if (min1 >= min2) return true;
-    return false;
+    float max1 = *std::max_element(bestScores.end()-K,   bestScores.end()),
+          max2 = *std::max_element(bestScores.end()-2*K, bestScores.end()-K);
+
+    return max2 >= max1;
 }
     
 /* --- the so called main loop */
@@ -605,40 +609,27 @@ Agent Population::evolve()
     for(int i=0; i<(int)pop.size(); i++)
         makeRandom(&pop[i]);
 
-    knownDS.lock();
-    knownDS.data = known;
-    knownDS.unlock();
-    knownDS.activate();
-    
-    alienDS.lock();
-    alienDS.data = alien;
-    alienDS.unlock();
-    alienDS.activate();
-    
-    bestDS.lock();
-    bestDS.known = known;
-    bestDS.alien = alien;
-    bestDS.unlock();
-    bestDS.bind();
+    knownDS.lock(); knownDS.data = known; knownDS.unlock();
+    alienDS.lock(); alienDS.data = alien; alienDS.unlock();
+    bestDS.lock(); bestDS.known = known; bestDS.alien = alien; bestDS.unlock();
 
-    std::vector<float> bestValues;
-    
     Agent bestEver;
     bestEver.target = -1000000.0f;
+
     for(int gencnt=1;;gencnt++)
     {
         evaluate();
 
-		gui_status("gen: %d, best fit: dist %.2f, diff %.2f, target %.2f fitness %f  |  d=(%.0f,%.0f), s=(%.2f,%.2f), a=%.3f",
+		gui_status("gen: %d, best fit: target %.2f fitness %f  |  d=(%.0f,%.0f), s=(%.2f,%.2f), a=%.3f",
 			       gencnt,
-				   pop[0].distance, pop[0].difference, pop[0].target, pop[0].fitness,
+				   pop[0].target, pop[0].fitness,
 				   pop[0].dx(),pop[0].dy(),pop[0].sx(),pop[0].sy(),pop[0].alfa()/M_PI*180.0);
 
         bestDS.lock();
         bestDS.m = pop[0].M;
         bestDS.unlock();
 
-        bestValues.push_back(pop[0].target);
+        bestScores.push_back(pop[0].target);
         if (bestEver.target < pop[0].target)
             bestEver = pop[0];
         
@@ -657,9 +648,13 @@ Agent Population::evolve()
         for(int i=0; i<(int)pop.size(); i++)
             mutation(&pop[i]);
         
-        if (stopWLOG(bestValues) || gencnt >= cfgMaxGeneration) break;
+        if (terminationCondition() || gencnt >= cfgMaxGeneration) break;
     }
-    debug("best score was %.6f\n", bestEver.target);
+    
+    knownDS.lock(); knownDS.data = NULL; knownDS.unlock();
+    alienDS.lock(); alienDS.data = NULL; alienDS.unlock();
+    bestDS.lock(); bestDS.known = bestDS.alien = NULL; bestDS.unlock();
+
     return bestEver;
 }
 
@@ -669,127 +664,115 @@ Population::Population(const Data *known, const Data *alien)
     this->alien = alien;
 }
 
-struct Result 
-{
-    static const int ILE = 5;
-    int ile;
-    Data* tab[ILE];
-    float value[ILE];
-};
+/* ------------------------------------------------------------------------ */
 
-inline static bool fooCompare(std::pair<Data*,Agent> p1, std::pair<Data*,Agent> p2) { return p1.second.target > p2.second.target; }
-class Database
+static bool fileExists(const char *filename)
 {
-    std::vector<Data> datable;
-    void init(const char* filename, const char* cat);
-public:
-    inline int size() const { return datable.size(); }
-    inline Database(const char* filename, const char* cat = NULL) { init(filename, cat); }
-    Result query(const char* filename, const char* cat = NULL) /* taki nasz "main" */
-    {
-        Image alienImg = Image::read(filename);
-        Data alienDat = Data::build(filename);
-        
-        std::vector< std::pair<Data*,Agent> > similars;
-        for (int i=0; i<size(); i++)
-        {
-            if (cat != NULL && strcmp(datable[i].category,cat) != 0) continue;
-            debug("start comparing to %s\n", datable[i].name);
-            Agent A = Population(&datable[i], &alienDat).evolve();
-            similars.push_back(std::make_pair(&datable[i], A));
-        }
-        
-        sort(similars.begin(), similars.end(), fooCompare);
-        Result ret;
-        
-        for (ret.ile=0; ret.ile<Result::ILE && ret.ile<(int)similars.size(); ret.ile++)
-            ret.tab[ret.ile] = similars[ret.ile].first,
-            ret.value[ret.ile] = similars[ret.ile].second.target;
-        
-        
-        
-        return ret;
-    }   
-};
-
-void Database::init(const char* filename, const char* onlycat)
-{
-    linereader lrd(filename);
-    char cat[64];
-    char path[256];
-    char name[64];
-    debug("reading database\n");
-    while (lrd.getline())
-    {
-        char *begin = lrd.buffer, *end = lrd.buffer+lrd.line_len;
-        if (*begin == '#') continue;
-        if (begin[0] == ':' && begin[1] == ':') 
-        {
-            begin ++; begin ++;
-            char *put = cat;
-            while (isspace(*begin)) begin ++;
-            for (char *read = begin; read != end && !isspace(*read); read ++) *(put++) = *read;
-            *put = '\0';
-            /* changes current category only */
-            debug("current category is %s\n", cat);
-        }
-        else
-        {
-            char *read = begin;
-            /* path */
-            char *put = path;
-            while (isspace(*read)) read ++;
-            for(; read != end; read++)
-                if (isspace(*read) && read[-1] != '\\') break; //file names may contain whitespaces, preceded by backslash
-                else *(put++) = *read;
-            *put = '\0';
-            /* name */
-            put = name;
-            while (isspace(*read)) read ++;
-            for (; read != end && *read != '\n'; read ++) *(put++) = *read;
-            *put = '\0';
-            
-            if (strlen(name) == 0 || strlen(path) == 0)
-                continue;
-            /* now initialize data */
-            
-            if (onlycat != NULL && strcmp(onlycat, cat)) {
-                debug("there is no need to build %s now\n", name);
-                continue;
-            }
-            
-            debug("bulding image from %s, its name is %s, category %s\n", path, name, cat);
-            
-            datable.push_back(Data::build(path));
-            strcpy(datable.back().name, name);
-            strcpy(datable.back().category, cat);
-        }
-    }
+    struct stat statbuf;
+    return stat(filename, &statbuf) == 0 && S_ISREG(statbuf.st_mode);
 }
 
+static std::vector<std::string> readPaths(const char *dbfile)
+{
+    std::vector<std::string> ret;
+    
+    linereader lrd(dbfile);
+    while(lrd.getline())
+    {
+        int n = lrd.line_len;
+        while(n > 0 && isspace(lrd.buffer[n-1])) n--;
+        lrd.buffer[n] = '\0';
 
-/* ------------------------------------------------------------------------ */
+        for(int i=0; i<n; i++)
+            if(lrd.buffer[i] == '\0')
+                throw std::runtime_error("failed to parse path list");
+        
+        char *p = lrd.buffer;
+        while(isspace(*p)) p++;
+
+        if(!fileExists(p))
+            throw std::runtime_error("failed to parse path list");
+
+        ret.push_back(std::string(p));
+    }
+
+    return ret;
+}
 
 int main(int argc, char *argv[])
 {
     srand(time(0));
     parse_config("evolution.cfg", cfgvars);
     spawn_worker_threads(cfgThreads); /* should detect no. of cpus available */
-    
-    gui_init(&argc, &argv); /* always before looking argc, argv */
+   
+    /* start GUI
+     * must go before looking at argc, argv and before
+     * calling gui_upload, which is done by Data::build */
+    gui_init(&argc, &argv);
 
-    if (argc != 2 && argc != 3) {
-        fprintf(stderr, "usage: [input: alien] [category]\n");
+    /* check if there's enough command arguments */
+    if (argc < 3) {
+        fprintf(stderr, "USAGE: ewo [alien image] [file with paths to known images]\n"
+                        "       ewo [alien image] [known image] [known image] ...\n");
         return 1;
     }
+
+    /* get known images filenames */
+    std::vector<std::string> knownPaths;
+    {
+        bool gotPaths = false;
+
+        /* first assume that file with known images paths was given */
+        if(argc == 3) {
+            try {
+                knownPaths = readPaths(argv[2]);
+                gotPaths = true;
+            } catch(std::exception e) {
+                warn("failed to read image paths from '%s'", argv[2]);
+            }
+        }
+
+        /* now assume each argument is separate file to be tested */
+        if(!gotPaths)
+            for(int i=2; i<argc; i++)
+                if(fileExists(argv[i]))
+                    knownPaths.push_back(std::string(argv[i]));
+                else {
+                    fail("file does not exist: '%s'", argv[i]);
+                    return 1;
+                }
+    }
     
-    Database DTB("evolution.database", (argc == 2 ? NULL : argv[2]));
-    Result res = DTB.query(argv[1], (argc == 2 ? NULL : argv[2]));
+    /* show up the displayslots */
+    knownDS.activate();
+    alienDS.activate();
+    bestDS.bind();
     
-    
-    printf("\n\n *** RESULT *** \n\n");
-    for (int i=0; i<res.ile; i++)
-        printf("%s, %s (%f)\n", res.tab[i]->name, res.tab[i]->category, res.value[i]);
+    /* read alien image */
+    Data alien = Data::build(argv[1]);
+
+    /* examine all known images */
+    std::vector<std::pair<float, const char *> > results;    
+    for(int i=0; i<(int)knownPaths.size(); i++)
+    {
+        const char *knownPath = knownPaths[i].c_str();
+        okay("processing '%s'", knownPath);
+        Data known = Data::build(knownPath);
+        Agent best = Population(&known, &alien).evolve();
+        info("best score was %f", best.target);
+        results.push_back(std::make_pair(best.target, knownPath));
+    }
+
+    /* print out the verdict */
+    std::sort(results.begin(), results.end());
+    printf("\n>> the verdict <<\n");
+    for(int i = results.size()-1;i>=0;i--)
+        printf("%s: %f\n", results[i].second, results[i].first);
+
+    /* and now shut down the GUI, or it will abort() */
+    knownDS.deactivate();
+    alienDS.deactivate();
+    bestDS.deactivate();
     
     return 0;
 }
