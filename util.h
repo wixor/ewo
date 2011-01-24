@@ -5,6 +5,9 @@
 #include <cmath>
 #include <cstring>
 #include <stdexcept>
+#include <pthread.h>
+
+/* -------------------------------------------------------------------------- */
 
 template <typename T> class Array2D
 {
@@ -42,6 +45,8 @@ public:
     inline bool inside(int x, int y) const { return x>=0 && y>=0 && x<width && y<height; }
 };
 
+/* -------------------------------------------------------------------------- */
+
 struct Point
 {
     float x,y;
@@ -60,6 +65,8 @@ struct Point
     }
 };
 
+/* -------------------------------------------------------------------------- */
+
 class Matrix
 {
     /* the matrix:
@@ -77,7 +84,7 @@ public:
     {
         Matrix &me = *this;
         me[0][0] = me[1][1] = 1;
-        me[0][1] = me[0][2] = me[1][0] = me[1][2] = me[2][0] = me[2][1] = 0;
+        me[0][1] = me[0][2] = me[1][0] = me[1][2] = 0;
     }
 
     static inline Matrix translation(float dx, float dy)
@@ -173,6 +180,64 @@ public:
         return R / (M[1][1]*M[0][0] - M[1][0]*M[0][1]);
     }
 };
+
+/* -------------------------------------------------------------------------- */
+
+class Completion
+{
+    pthread_cond_t cond;
+    pthread_mutex_t mutex;
+    int counter;
+
+public:
+    Completion();
+    ~Completion();
+
+    void completed();
+    void queued();
+    void wait();
+};
+
+class AsyncJob
+{
+    friend class AsyncQueue;
+    AsyncJob *next;
+
+public:
+    Completion *completion;
+
+    virtual ~AsyncJob();
+    virtual void run() = 0;
+};
+
+class AsyncQueue
+{
+    pthread_mutex_t mutex;
+    pthread_cond_t cond;
+
+    AsyncJob *first, **last;
+
+public:
+    AsyncQueue();
+    ~AsyncQueue();
+
+    void queue(AsyncJob *job);
+    AsyncJob *get(void);
+};
+
+class WorkerThread
+{
+    pthread_t thread;
+    AsyncQueue *queue;
+    
+public:
+    WorkerThread(AsyncQueue *queue);
+    void start();
+    void run();
+};
+
+extern AsyncQueue *aq;
+void spawn_worker_threads(int n);
 
 #endif
 

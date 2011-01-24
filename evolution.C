@@ -2,15 +2,15 @@
 #include <cstdio>
 #include <cmath>
 #include <cassert>
+#include <ctime>
 #include <ctype.h>
 #include <vector>
 #include <string>
 #include <algorithm>
 #include <stdexcept>
 
+#include "util.h"
 #include "poi.h"
-#include "evolution.h"
-#include "workers.h"
 #include "gui.h"
 #include "image.h"
 #include "config.h"
@@ -144,25 +144,25 @@ public:
     Image *raw;
     std::vector<POI> pois;
     int originX, originY; /* median of POIs */
-    CairoImage compimg; /* image for compositing */
+    CairoImage caimg; /* image for gui */
 
     static Data build(const char *filename);
 
-    std::vector<POI> transformPOIs(const Matrix33 &M) const;
+    std::vector<POI> transformPOIs(const Matrix &M) const;
 };
 
 Data Data::build(const char *filename)
 {
     Data ret;
     ret.raw = new Image(0,0);
-    (*ret.raw) = Image::readPGM(filename);
+    (*ret.raw) = Image::read(filename);
 
     if(!ret.readCached(filename)) {
         ret.findPOIs();
         ret.findOrigin();
         ret.writeCache(filename);
     }
-    Composite::prepare(*ret.raw, &ret.compimg);
+    ret.caimg = gui_upload(*ret.raw);
 
     return ret;
 }
@@ -277,20 +277,94 @@ void Data::writeCache(const char *filename) const
     fclose(f);
 }
 
-std::vector<POI> Data::transformPOIs(const Matrix33 &M) const
+std::vector<POI> Data::transformPOIs(const Matrix &M) const
 {
     std::vector<POI> xfmd(pois.size());
     for(int i=0; i<(int)pois.size(); i++)
-        xfmd[i] = M * pois[i];
+        xfmd[i] = POI(M * pois[i], pois[i].val);
     return xfmd;
 }
+
+/* ------------------------------------------------------------------------ */
+
+class ImageDisplaySlot : public DisplaySlot
+{
+public:
+    const Data *data;
+    rgba color;
+
+    inline ImageDisplaySlot(const char *name, const Data *data = NULL, rgba color = rgba(0,0,0,0))
+        : DisplaySlot(name), data(data), color(color) { }
+    virtual ~ImageDisplaySlot() { }
+
+    virtual void draw()
+    {
+        resize(data->raw->getWidth(), data->raw->getHeight());
+        drawImage(data->caimg);
+
+        std::vector<Point> ps(data->pois.size());
+        for(int i=0; i<(int)data->pois.size(); i++)
+            ps[i] = data->pois[i];
+        drawDots(ps,3, color);
+    }
+};
+
+class FitDisplaySlot : public DisplaySlot
+{
+public:
+    const Data *known; rgba knownColor;
+    const Data *alien; rgba alienColor;
+    Matrix m;
+
+    inline FitDisplaySlot(const char *name,
+                          const Data *known = NULL, rgba knownColor = rgba(0,0,0,0),
+                          const Data *alien = NULL, rgba alienColor = rgba(0,0,0,0),
+                          const Matrix &m = Matrix()) :
+        DisplaySlot(name), known(known), knownColor(knownColor), alien(alien), alienColor(alienColor), m(m) { }
+
+    virtual ~FitDisplaySlot() { }
+
+    virtual void draw()
+    {
+        struct timespec tstart, tend;
+
+        clock_gettime(CLOCK_THREAD_CPUTIME_ID, &tstart);
+
+        resize(alien->raw->getWidth(), alien->raw->getHeight());
+        drawImage(alien->caimg);
+        drawDifference(known->caimg, m);
+        
+        std::vector<Point> ps(alien->pois.size());
+        for(int i=0; i<(int)alien->pois.size(); i++)
+            ps[i] = alien->pois[i];
+        drawDots(ps,6, alienColor);
+
+        ps.resize(known->pois.size());
+        for(int i=0; i<(int)known->pois.size(); i++)
+            ps[i] = m * known->pois[i];
+        drawDots(ps,6, knownColor);
+        
+        clock_gettime(CLOCK_THREAD_CPUTIME_ID, &tend);
+        long long p = 1000000000LL*tstart.tv_sec + tstart.tv_nsec,
+                  q = 1000000000LL*tend.tv_sec   + tend.tv_nsec,
+                  r = q-p;
+        printf("drawing took %d.%06d ms\n", (int)(r/1000000), (int)(r%1000000));
+    }
+};
+
+/* those are created statically, however they will only initialize
+ * themselves upon first action, which must occur after gtk_gui_init. */
+
+static ImageDisplaySlot knownDS("known image", NULL, rgba(0,1,0,0.75)),
+                        alienDS("alien image", NULL, rgba(1,0,0,0.75));
+static FitDisplaySlot   bestDS("best fit", NULL, rgba(0,1,0,0.75), NULL, rgba(1,0,0,0.75));
 
 /* ------------------------------------------------------------------------ */
 
 class Agent
 {
 public:
-    Matrix33 M; /* the transformation matrix */
+    Matrix M; /* the transformation matrix */
     float distance; /* point cloud distance */ 
     float difference; /* image difference metric */
     float target; /* target function, computed from the above */
@@ -323,35 +397,23 @@ public:
  *    y = ... M3 * M2 * M1 * x
  * and we want newly applied transformation to come last. */
 void Agent::translate(float dx, float dy) {
-    M = Matrix33::translation(dx,dy)
+    M = Matrix::translation(dx,dy)
       * M;
 }
 void Agent::rotate(float angle, float ox, float oy) {
-    POI origin = M * POI(ox,oy,0);
-    M = Matrix33::translation(origin.x,origin.y)
-      * Matrix33::rotation(angle)
-      * Matrix33::translation(-origin.x,-origin.y)
+    Point origin = M * POI(ox,oy,0);
+    M = Matrix::translation(origin.x,origin.y)
+      * Matrix::rotation(angle)
+      * Matrix::translation(-origin.x,-origin.y)
       * M;
 }
 void Agent::scale(float sx, float sy, float ox, float oy) {
-    POI origin = M * POI(ox,oy,0);
-    M = Matrix33::translation(origin.x,origin.y)
-      * Matrix33::scaling(sx, sy)
-      * Matrix33::translation(-origin.x,-origin.y)
+    Point origin = M * POI(ox,oy,0);
+    M = Matrix::translation(origin.x,origin.y)
+      * Matrix::scaling(sx, sy)
+      * Matrix::translation(-origin.x,-origin.y)
       * M;
 }
-
-/* ------------------------------------------------------------------------ */
-
-/* those are created statically, however they will only initialize
- * themselves upon first action, which must occur after gtk_gui_init. */
-
-static DisplaySlot knownImgDS("known image"), alienImgDS("alien image"),
-                   knownPOIsDS("known POIs"), alienPOIsDS("alien POIs");
-
-static DisplaySlot best("best fit (POIs)"),
-                   bestIm("best fit (image)"),
-                   diffIm("best fit (difference)");
 
 /* ------------------------------------------------------------------------ */
 
@@ -401,7 +463,7 @@ static float matchPOIs(const std::vector<POI> &a, const std::vector<POI> &b)
     {
         float best = 1e+30;
         for(int j=0; j<(int)b.size(); j++)
-            best = std::min(best, POI::dist(a[i], b[j]));
+            best = std::min(best, (a[i]-b[j]).dist());
         sum += best;
     }
     return sum;
@@ -470,7 +532,7 @@ int Population::roulette(int n)
 /* --- mutations */
 void Population::makeRandom(Agent *a)
 {
-    a->M = Matrix33();
+    a->M = Matrix();
     a->translate(
             Random::real(cfgTranslateInit) * known->raw->getWidth(),
             Random::real(cfgTranslateInit) * known->raw->getHeight());
@@ -543,12 +605,22 @@ Agent Population::evolve()
     for(int i=0; i<(int)pop.size(); i++)
         makeRandom(&pop[i]);
 
-    knownImgDS.update(*known->raw);
-    alienImgDS.update(*alien->raw);
-    knownPOIsDS.update(renderPOIs(known->pois, known->raw->getWidth(), known->raw->getHeight()));
-    alienPOIsDS.update(renderPOIs(alien->pois, alien->raw->getWidth(), alien->raw->getHeight()));
+    knownDS.lock();
+    knownDS.data = known;
+    knownDS.unlock();
+    knownDS.activate();
     
-    diffIm.bind();
+    alienDS.lock();
+    alienDS.data = alien;
+    alienDS.unlock();
+    alienDS.activate();
+    
+    bestDS.lock();
+    bestDS.known = known;
+    bestDS.alien = alien;
+    bestDS.unlock();
+    bestDS.bind();
+
     std::vector<float> bestValues;
     
     Agent bestEver;
@@ -557,24 +629,15 @@ Agent Population::evolve()
     {
         evaluate();
 
-		gui_gtk_status("gen: %d, best fit: dist %.2f, diff %.2f, target %.2f fitness %f  |  d=(%.0f,%.0f), s=(%.2f,%.2f), a=%.3f",
-					   gencnt,
-					   pop[0].distance, pop[0].difference, pop[0].target, pop[0].fitness,
-					   pop[0].dx(),pop[0].dy(),pop[0].sx(),pop[0].sy(),pop[0].alfa()/M_PI*180.0);
+		gui_status("gen: %d, best fit: dist %.2f, diff %.2f, target %.2f fitness %f  |  d=(%.0f,%.0f), s=(%.2f,%.2f), a=%.3f",
+			       gencnt,
+				   pop[0].distance, pop[0].difference, pop[0].target, pop[0].fitness,
+				   pop[0].dx(),pop[0].dy(),pop[0].sx(),pop[0].sy(),pop[0].alfa()/M_PI*180.0);
 
-        if(gencnt%10 == 0) {
-            best.update(renderPOIs(known->transformPOIs(pop[0].M),
-                                   alien->raw->getWidth(), alien->raw->getHeight()));
+        bestDS.lock();
+        bestDS.m = pop[0].M;
+        bestDS.unlock();
 
-            CairoImage *bestImCanvas = bestIm.getCanvas();
-              bestImCanvas->resize(alien->raw->getWidth(), alien->raw->getHeight());
-            Composite::transform(known->compimg, pop[0].M, bestImCanvas);
-            bestIm.putCanvas();
-            
-            CairoImage *diffImCanvas = diffIm.getCanvas();
-            Composite::difference(known->compimg, *alien->raw, pop[0].M, diffImCanvas);
-            diffIm.putCanvas();
-        }
         bestValues.push_back(pop[0].target);
         if (bestEver.target < pop[0].target)
             bestEver = pop[0];
@@ -624,7 +687,7 @@ public:
     inline Database(const char* filename, const char* cat = NULL) { init(filename, cat); }
     Result query(const char* filename, const char* cat = NULL) /* taki nasz "main" */
     {
-        Image alienImg = Image::readPGM(filename);
+        Image alienImg = Image::read(filename);
         Data alienDat = Data::build(filename);
         
         std::vector< std::pair<Data*,Agent> > similars;
@@ -634,20 +697,6 @@ public:
             debug("start comparing to %s\n", datable[i].name);
             Agent A = Population(&datable[i], &alienDat).evolve();
             similars.push_back(std::make_pair(&datable[i], A));
-
-#if 0
-            /* this outputs best match to diff_{name}.pgm */
-            CairoImage diffIm(alienImg);
-            Composite::difference(datable[i].compimg, alienImg, A.M, &diffIm);
-            Image dump(alienImg);
-            diffIm.toImage(&dump);
-            char output[128] = "diff_";
-            strcat(output, datable[i].name);
-            strcat(output, ".pgm");
-            dump.writePGM(output);
-#endif
-            
-            
         }
         
         sort(similars.begin(), similars.end(), fooCompare);
@@ -727,7 +776,7 @@ int main(int argc, char *argv[])
     parse_config("evolution.cfg", cfgvars);
     spawn_worker_threads(cfgThreads); /* should detect no. of cpus available */
     
-    gui_gtk_init(&argc, &argv); /* always before looking argc, argv */
+    gui_init(&argc, &argv); /* always before looking argc, argv */
 
     if (argc != 2 && argc != 3) {
         fprintf(stderr, "usage: [input: alien] [category]\n");

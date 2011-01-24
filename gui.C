@@ -1,138 +1,101 @@
 #include <cstdio>
 #include <cstring>
+#include <cassert>
 #include <stdarg.h>
+#include <vector>
+
+#include <cairo.h>
+#include <cairo-xlib.h>
 
 #include "image.h"
-#include "composite.h"
 #include "gui.h"
 
-DisplaySlot::DisplaySlot(const char *initname)
+DisplaySlot::DisplaySlot(const char *name)
 {
-    pthread_mutex_init(&lock, NULL);
-    pthread_cond_init(&cond, NULL);
-
-    events = 0;
-    name = strdup(initname);
-    //caption = strdup("");
+    pthread_mutex_init(&mutex, NULL);
+    width = height = 0;
+    this->name = name;
     active = false;
-
-    img.resize(100,100);
-    cr_surface = img.getCairoSurface();
 }
 
 void DisplaySlot::activate()
 {
-    if(active)
-        return;
-
-    gui_gtk_register(this);
-
-    pthread_mutex_lock(&lock);
-    sendEventSync(DS_INIT);
-    pthread_mutex_unlock(&lock);
-
+    if(active) return;
+    gui_register(this);
     active = true;
+}
+
+void DisplaySlot::deactivate()
+{
+    if(!active) return;
+    gui_unregister(this);
+    active = false;
 }
 
 DisplaySlot::~DisplaySlot()
 {
-    if(active) {
-        pthread_mutex_lock(&lock);
-        sendEventSync(DS_CLEANUP);
-        pthread_mutex_unlock(&lock);
+    assert(!active);
+    pthread_mutex_destroy(&mutex);
+}
 
-        gui_gtk_unregister(this);
+extern "C" void displayslot_paint(struct displayslot *ds_)
+{
+    DisplaySlot *ds = (DisplaySlot *)ds_;
+    ds->lock();
+    ds->draw();
+    ds->unlock();
+}
+
+void DisplaySlot::fill(rgba color)
+{
+    cairo_set_source_rgba(cr, color.r,color.g,color.b,color.a);
+    cairo_paint(cr);
+}
+
+void DisplaySlot::drawImage(CairoImage ci, const Matrix *m, bool difference)
+{
+    cairo_surface_t *surface = ci;
+    cairo_pattern_t *pattern = cairo_pattern_create_for_surface(surface);
+
+    cairo_matrix_t m1, m2;
+    if(m) {
+        cairo_matrix_init(&m1,
+            (*m)[0][0], (*m)[1][0],
+            (*m)[0][1], (*m)[1][1],
+            (*m)[0][2], (*m)[1][2]);
+        cairo_get_matrix(cr, &m2);
+        cairo_matrix_multiply(&m1, &m1, &m2);
+        cairo_set_matrix(cr, &m1);
     }
 
-//    free(caption);
-    free(name);
+    int w = ci.getWidth(), h = ci.getHeight();
 
-    pthread_cond_destroy(&cond);
-    pthread_mutex_destroy(&lock);
+    cairo_set_source(cr, pattern);
+    if(difference)
+        cairo_paint_with_alpha(cr, 0.5);
+    else {
+        cairo_rectangle(cr, 0,0, w,h);
+        cairo_fill(cr);
+    }
+
+    if(m)
+        cairo_set_matrix(cr, &m2);
+
+    cairo_pattern_destroy(pattern);
 }
 
-void DisplaySlot::sendEvent(int ev) {
-    events |= ev;
-    gui_gtk_poke();
-}
-void DisplaySlot::sendEventSync(int ev) {
-    sendEvent(ev);
-    pthread_cond_wait(&cond, &lock);
-}
-
-void DisplaySlot::rename(const char *fmt, ...)
+void DisplaySlot::drawDot(Point p, float d, rgba color)
 {
-    char *buf;
-    va_list args;
-    va_start(args, fmt);
-    vasprintf(&buf, fmt, args);
-    va_end(args);
-
-    activate();
-    pthread_mutex_lock(&lock);
-    free(name);
-    name = buf;
-    sendEvent(DS_RENAME);
-    pthread_mutex_unlock(&lock);
+    cairo_set_source_rgba(cr, color.r,color.g,color.b,color.a);
+    cairo_rectangle(cr, p.x-.5f*d, p.y-.5f*d, d,d);
+    cairo_fill(cr);
 }
 
-/*void DisplaySlot::recaption(const char *fmt, ...)
+void DisplaySlot::drawDots(std::vector<Point> ps, float d, rgba color)
 {
-    char *buf;
-    va_list args;
-    va_start(args, fmt);
-    vasprintf(&buf, fmt, args);
-    va_end(args);
-
-    activate();
-    pthread_mutex_lock(&lock);
-    free(caption);
-    caption = buf;
-    sendEvent(DS_RECAPTION);
-    pthread_mutex_unlock(&lock);
-}*/
-
-void DisplaySlot::update(const CairoImage &src)
-{
-    activate();
-    getCanvas();
-    img = src;
-    putCanvas();
+    cairo_set_source_rgba(cr, color.r,color.g,color.b,color.a);
+    for(int i=0; i<(int)ps.size(); i++)
+        cairo_rectangle(cr, ps[i].x-.5f*d, ps[i].y-.5f*d, d,d);
+    cairo_fill(cr);
 }
 
-void DisplaySlot::update(const Image &src, bool transparency)
-{
-    activate();
-    getCanvas();
-    img.fromImage(src, transparency);
-    putCanvas();
-}
-
-void DisplaySlot::bind()
-{
-    activate();
-    pthread_mutex_lock(&lock);
-    sendEvent(DS_BIND);
-    pthread_mutex_unlock(&lock);
-}
-
-void DisplaySlot::unbind()
-{
-    activate();
-    pthread_mutex_lock(&lock);
-    sendEvent(DS_UNBIND);
-    pthread_mutex_unlock(&lock);
-}
-
-CairoImage *DisplaySlot::getCanvas()
-{
-    activate();
-    pthread_mutex_lock(&lock);
-    return &img;
-}
-void DisplaySlot::putCanvas()
-{
-    cr_surface = img.getCairoSurface();
-    sendEvent(DS_UPDATE);
-    pthread_mutex_unlock(&lock);
-}

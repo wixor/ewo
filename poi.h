@@ -13,7 +13,12 @@ struct POI : public Point
 
     inline POI() { }
     inline POI(float x, float y, float val) : Point(x,y), val(val) { }
+    inline POI(const Point &p, float val) : Point(p), val(val) { }
     inline POI(const POI &p) : Point(p.x, p.y), val(p.val) { }
+
+    inline bool operator<(const POI &p) const {
+        return val != p.val ? val > p.val : (Point)(*this) < (Point)p;
+    } 
 };
 
 Array2D<float> evaluateImage(const Image &src, int steps, const std::vector<float> &scales);

@@ -9,7 +9,13 @@
 #include <unistd.h>
 #include <sys/eventfd.h>
 
+#include <X11/Xlib.h>
+#include <X11/Xutil.h>
 #include <gtk/gtk.h>
+#include <gdk/gdkx.h>
+
+#include <cairo.h>
+#include <cairo-xlib.h>
 
 #include "gui-gtk.h"
 
@@ -24,7 +30,6 @@ struct displayarea
         GtkComboBox *slotselect;
         GtkButton *zoomin;
         GtkButton *zoomout;
-//      GtkLabel *caption;
 
     struct displayslot *slot;
     float scale;
@@ -32,70 +37,101 @@ struct displayarea
 
 static struct displayarea areas[4];
 
-static GList *slots = NULL;
 static GtkListStore *slotsModel;
-static pthread_mutex_t slots_lock;
-
-static pthread_mutex_t statusbar_lock;
-static char *statusbar_msg;
-static int statusbar_ctx;
 
 static GtkToolbar *toolbar;
 static GtkToolButton *single, *hsplit, *vsplit, *quad;
+
+static int statusbar_ctx;
 static GtkStatusbar *statusbar;
 
 /* ------------------------------------------------------------------------- */
+
+/* this is defined in gui.C */
+void displayslot_paint(struct displayslot *);
 
 static gboolean displayarea_expose(GtkWidget *widget, GdkEventExpose *event, gpointer da_)
 {
     struct displayarea *da = (struct displayarea *)da_;
 
+    guint expected_width, expected_height, current_width, current_height;
+    gtk_layout_get_size(da->area, &current_width, &current_height);
+
     GdkWindow *bin_window = gtk_layout_get_bin_window(da->area);
     cairo_t *cairo = gdk_cairo_create(bin_window);
 
-    if(!da->slot)
-    {
+    if(!da->slot) {
         cairo_set_source_rgb(cairo, .85,.85,.85);
         cairo_paint(cairo);
-    }
-    else
-    {
-        pthread_mutex_lock(&da->slot->lock);
+        expected_width = expected_height = 0;
+    } else {
+        struct displayslot *ds = da->slot;
 
-        cairo_pattern_t *pattern = cairo_pattern_create_for_surface(da->slot->cr_surface);
         cairo_matrix_t matrix;
-        cairo_matrix_init_scale (&matrix, 1./da->scale, 1./da->scale);
-        cairo_pattern_set_matrix (pattern, &matrix);
-        cairo_set_source(cairo, pattern);
-        cairo_paint(cairo);
-        cairo_pattern_destroy(pattern);
-        
-        pthread_mutex_unlock(&da->slot->lock);
-    }
+        cairo_matrix_init_scale(&matrix, da->scale, da->scale);
+        cairo_set_matrix(cairo, &matrix);
 
+        ds->cr = cairo;
+        displayslot_paint(da->slot);
+
+        expected_width = ds->width * da->scale;
+        expected_height = ds->height * da->scale;
+    }
+    
     cairo_destroy(cairo);
+
+    if(expected_width != current_width || expected_height != current_height)
+        gtk_layout_set_size(da->area, expected_width, expected_height);
+    
     return TRUE;
 }
-static void displayarea_update(struct displayarea *da);
+
 static void displayarea_zoomin(GtkWidget *widget, gpointer da_)
 {
     struct displayarea *da = (struct displayarea *)da_;
     if(da->scale < 10) {
-        da->scale*=2.f;
-        displayarea_update(da);
+        da->scale *= 2.f;
+        if(da->slot)
+            gtk_widget_queue_draw(GTK_WIDGET(da->area));
     }
 }
 static void displayarea_zoomout(GtkWidget *widget, gpointer da_)
 {
     struct displayarea *da = (struct displayarea *)da_;
     if(da->scale > .125) {
-        da->scale/=2.f;
-        displayarea_update(da);
+        da->scale *= 0.5f;
+        if(da->slot)
+            gtk_widget_queue_draw(GTK_WIDGET(da->area));
     }
 }
 
-static void displayarea_set_slot(struct displayarea *da, struct displayslot *ds);
-static void displayarea_select_slot(GtkWidget *widget, gpointer da_)
+static void displayarea_refresh(struct displayarea *da)
+{
+    if(da->slot)
+        gtk_widget_queue_draw(GTK_WIDGET(da->area));
+}
+
+static void displayarea_set_slot(struct displayarea *da, struct displayslot *ds)
+{
+    da->slot = ds;
+    gtk_widget_queue_draw(GTK_WIDGET(da->area));
+}
+
+static void displayarea_change_slot(struct displayarea *da, struct displayslot *ds)
+{
+    GtkTreeIter iter;
+    gtk_tree_model_get_iter_first(GTK_TREE_MODEL(slotsModel), &iter);
+    do {
+        struct displayslot *ds_;
+        gtk_tree_model_get(GTK_TREE_MODEL(slotsModel), &iter,  0,&ds_,  -1);
+        if(ds_ == ds) {
+            gtk_combo_box_set_active_iter(da->slotselect, &iter);
+            break;
+        }
+    } while(gtk_tree_model_iter_next(GTK_TREE_MODEL(slotsModel), &iter));
+}
+
+static void displayarea_slot_changed(GtkWidget *widget, gpointer da_)
 {
     struct displayarea *da = (struct displayarea *)da_;
 
@@ -105,7 +141,7 @@ static void displayarea_select_slot(GtkWidget *widget, gpointer da_)
 
     struct displayslot *ds;
     gtk_tree_model_get(GTK_TREE_MODEL(slotsModel), &iter,  0,&ds,  -1);
-    displayarea_set_slot(da,ds);
+    displayarea_set_slot(da, ds);
 }
 
 static void displayarea_init(struct displayarea *da)
@@ -119,7 +155,6 @@ static void displayarea_init(struct displayarea *da)
     da->slotselect = GTK_COMBO_BOX(gtk_combo_box_new_with_model(GTK_TREE_MODEL(slotsModel)));
     da->zoomin = GTK_BUTTON(gtk_button_new());
     da->zoomout = GTK_BUTTON(gtk_button_new());
-//    da->caption = GTK_LABEL(gtk_label_new(""));
 
     gtk_button_set_image(da->zoomin,  gtk_image_new_from_stock(GTK_STOCK_ZOOM_IN,  GTK_ICON_SIZE_BUTTON));
     gtk_button_set_image(da->zoomout, gtk_image_new_from_stock(GTK_STOCK_ZOOM_OUT, GTK_ICON_SIZE_BUTTON));
@@ -130,11 +165,8 @@ static void displayarea_init(struct displayarea *da)
         gtk_cell_layout_set_attributes(GTK_CELL_LAYOUT(da->slotselect), crend, "text", 1, NULL);
     }
 
-//    gtk_misc_set_alignment(GTK_MISC(da->caption), 0, .5);
-
     gtk_box_pack_start(GTK_BOX(da->root), GTK_WIDGET(da->scrolled_window), TRUE,TRUE,2);
     gtk_box_pack_start(GTK_BOX(da->root), GTK_WIDGET(da->buttbox), FALSE,FALSE,2);
-//    gtk_box_pack_start(GTK_BOX(da->root), GTK_WIDGET(da->caption), FALSE,FALSE,2);
 
     gtk_container_add(GTK_CONTAINER(da->scrolled_window), GTK_WIDGET(da->area));
 
@@ -154,7 +186,7 @@ static void displayarea_init(struct displayarea *da)
     g_signal_connect(G_OBJECT(da->zoomout), "clicked",
                      G_CALLBACK (displayarea_zoomout), da);
     g_signal_connect(G_OBJECT(da->slotselect), "changed",
-                     G_CALLBACK (displayarea_select_slot), da);
+                     G_CALLBACK (displayarea_slot_changed), da);
 
     g_object_ref(G_OBJECT(da->root));
 }
@@ -162,125 +194,6 @@ static void displayarea_init(struct displayarea *da)
 static void displayarea_cleanup(struct displayarea *da)
 {
     gtk_widget_destroy(GTK_WIDGET(da->root));
-}
-
-
-static void displayarea_update(struct displayarea *da)
-{
-    if(da->slot)
-    {
-        cairo_surface_t *s = da->slot->cr_surface;
-        int w = cairo_image_surface_get_width(s),
-            h = cairo_image_surface_get_height(s);
-
-        gtk_layout_set_size(da->area, w*da->scale,h*da->scale);
-    }
-    gtk_widget_queue_draw(GTK_WIDGET(da->area));
-}
-
-/*static void displayarea_recaption(struct displayarea *da) {
-    gtk_label_set_text(da->caption, da->slot ? da->slot->caption : "");
-}*/
-
-static void displayarea_set_slot(struct displayarea *da, struct displayslot *ds)
-{
-    GtkTreeIter iter;
-    gtk_tree_model_get_iter_first(GTK_TREE_MODEL(slotsModel), &iter);
-    do {
-        struct displayslot *ds_;
-        gtk_tree_model_get(GTK_TREE_MODEL(slotsModel), &iter,  0,&ds_,  -1);
-        if(ds_ == ds) {
-            gtk_combo_box_set_active_iter(da->slotselect, &iter);
-            break;
-        }
-    } while(gtk_tree_model_iter_next(GTK_TREE_MODEL(slotsModel), &iter));
-
-    da->slot = ds;
-    displayarea_update(da);
-//    displayarea_recaption(da);
-}
-
-/* ------------------------------------------------------------------------- */
-
-static int efd;
-
-static gboolean efd_readable(GIOChannel *chan, GIOCondition cond, gpointer data)
-{
-    eventfd_t val;
-    eventfd_read(efd, &val);
-
-    pthread_mutex_lock(&statusbar_lock);
-    if(statusbar_msg) {
-        gtk_statusbar_pop(statusbar, statusbar_ctx);
-        gtk_statusbar_push(statusbar, statusbar_ctx, statusbar_msg);
-        free(statusbar_msg);
-        statusbar_msg = NULL;
-    }
-    pthread_mutex_unlock(&statusbar_lock);
-
-    pthread_mutex_lock(&slots_lock);
-    for(GList *p = slots; p; p = p->next)
-    {
-        struct displayslot *ds = p->data;
-        pthread_mutex_lock(&ds->lock);
-
-        GtkTreeIter *iter = (GtkTreeIter *)&ds->iter;
-
-        if(ds->events & DS_INIT) 
-            gtk_list_store_insert_with_values(slotsModel,iter,2000000000,  0,ds,  1,ds->name, -1);
-        
-        if(ds->events & DS_RENAME)
-            gtk_list_store_set(slotsModel, iter, 1,ds->name, -1);
-        
-/*        if(ds->events & DS_RECAPTION)
-            for(int i=0; i<4; i++)
-                if(areas[i].slot == ds)
-                    displayarea_recaption(&areas[i]); */
-        
-        if(ds->events & DS_UPDATE)
-            for(int i=0; i<4; i++)
-                if(areas[i].slot == ds)
-                    displayarea_update(&areas[i]);
-
-        if(ds->events & DS_BIND) {
-            int bound = FALSE;
-            for(int i=0; i<4; i++)
-                bound = bound || (areas[i].slot == ds);
-            if(!bound)
-                for(int i=0; i<4; i++)
-                    if(areas[i].slot == NULL) {
-                        displayarea_set_slot(&areas[i], ds);
-                        break;
-                    }
-        }
-
-        if(ds->events & DS_UNBIND)
-            for(int i=0; i<4; i++)
-                if(areas[i].slot == ds)
-                    displayarea_set_slot(&areas[i], NULL);
-
-        if(ds->events & DS_CLEANUP) {
-            for(int i=0; i<4; i++)
-                if(areas[i].slot == ds)
-                    displayarea_set_slot(&areas[i], NULL);
-            gtk_list_store_remove(slotsModel, iter);
-        }
-
-        ds->events = 0;
-        pthread_cond_broadcast(&ds->cond);
-        pthread_mutex_unlock(&ds->lock);
-    }
-    pthread_mutex_unlock(&slots_lock);
-
-    return TRUE;
-}
-
-static void efd_init(void)
-{
-    efd = eventfd(0, EFD_CLOEXEC);
-
-    GIOChannel *gioc = g_io_channel_unix_new(efd);
-    g_io_add_watch(gioc, G_IO_IN, efd_readable, NULL);
 }
 
 /* ------------------------------------------------------------------------- */
@@ -292,36 +205,140 @@ static const guint8 icoVsplit[] __attribute__ ((__aligned__ (4)));
 static const guint8 icoHsplit[] __attribute__ ((__aligned__ (4)));
 static const guint8 icoQuad[] __attribute__ ((__aligned__ (4)));
 
-void gui_gtk_poke(void)
+void gui_bind(struct displayslot *ds)
 {
-    eventfd_write(efd, 1);
+    gdk_threads_enter();
+
+    gboolean bound = FALSE;
+    for(int i=0; i<4; i++)
+        bound = bound || (areas[i].slot == ds);
+
+    if(!bound)
+        for(int i=0; i<4; i++)
+            if(areas[i].slot == NULL) {
+                displayarea_change_slot(&areas[i], ds);
+                break;
+            }
+
+    gdk_flush();
+    gdk_threads_leave();
 }
 
-void gui_gtk_status(const char *fmt, ...)
+void gui_unbind(struct displayslot *ds)
+{
+    gdk_threads_enter();
+    
+    for(int i=0; i<4; i++)
+        if(areas[i].slot == ds)
+            displayarea_change_slot(&areas[i], NULL);
+
+    gdk_flush();
+    gdk_threads_leave();
+}
+
+void gui_register(struct displayslot *ds)
+{
+    gdk_threads_enter();
+    
+    gtk_list_store_insert_with_values(
+        slotsModel,&ds->iter,2000000000,  0,ds,  1,ds->name, -1);
+
+    gdk_flush();
+    gdk_threads_leave();
+}
+
+void gui_unregister(struct displayslot *ds)
+{
+    gdk_threads_enter();
+
+    for(int i=0; i<4; i++)
+        if(areas[i].slot == ds)
+            displayarea_change_slot(&areas[i], NULL);
+    gtk_list_store_remove(slotsModel, &ds->iter);
+
+    gdk_flush();
+    gdk_threads_leave();
+}
+
+void gui_status(const char *fmt, ...)
 {
     va_list args; va_start(args, fmt);
     char *buf; vasprintf(&buf, fmt, args);
     va_end(args);
 
-    pthread_mutex_lock(&statusbar_lock);
-    free(statusbar_msg);
-    statusbar_msg = buf;
-    gui_gtk_poke();
-    pthread_mutex_unlock(&statusbar_lock);
+    gdk_threads_enter();
+    
+    gtk_statusbar_pop(statusbar, statusbar_ctx);
+    gtk_statusbar_push(statusbar, statusbar_ctx, buf);
+    
+    gdk_flush();
+    gdk_threads_leave();
+
+    free(buf);
 }
 
-void gui_gtk_register(struct displayslot *ds)
+static cairo_user_data_key_t gui_free_pixmap_key;
+static void gui_free_pixmap(void *data)
 {
-    pthread_mutex_lock(&slots_lock);
-    slots = g_list_prepend(slots, ds);
-    pthread_mutex_unlock(&slots_lock);
+    gdk_threads_enter();
+
+    Display *display =
+        gdk_x11_get_default_xdisplay();
+    Pixmap pixmap =
+        cairo_xlib_surface_get_drawable((cairo_surface_t *)data);
+
+    XFreePixmap(display, pixmap);
+    
+    gdk_flush();
+    gdk_threads_leave();
 }
 
-void gui_gtk_unregister(struct displayslot *ds)
+cairo_surface_t *img_makesurface(int width, int height, const uint8_t *bytes); /* from image.c */
+cairo_surface_t *gui_do_upload(int width, int height, const void *bytes)
 {
-    pthread_mutex_lock(&slots_lock);
-    slots = g_list_remove(slots, ds);
-    pthread_mutex_unlock(&slots_lock);
+    cairo_surface_t *source = img_makesurface(width, height, bytes);
+    if(!source) return NULL;
+
+    gdk_threads_enter();
+
+    Display *display =
+        gdk_x11_get_default_xdisplay();
+    Window root =
+        XDefaultRootWindow(display);
+    Visual *vis =
+        gdk_x11_visual_get_xvisual(
+            gdk_visual_get_best_with_both(24, GDK_VISUAL_TRUE_COLOR));
+    
+    Pixmap pixmap =
+        XCreatePixmap(display, root, width, height, 24);
+    cairo_surface_t *surface =
+        cairo_xlib_surface_create(display, pixmap, vis, width, height);
+    
+    cairo_surface_set_user_data(surface, &gui_free_pixmap_key, surface, gui_free_pixmap);
+
+    cairo_t *cr = cairo_create(surface);
+    cairo_set_source_surface(cr, source, 0,0);
+    cairo_paint(cr);
+    cairo_destroy(cr);
+
+    gdk_flush();
+    gdk_threads_leave();
+
+    cairo_surface_destroy(source);
+
+    return surface;
+}
+
+static gboolean gui_refresh(gpointer data)
+{
+    gdk_threads_enter();
+
+    for(int i=0; i<4; i++)
+        displayarea_refresh(&areas[i]);
+
+    gdk_flush();
+    gdk_threads_leave();
+    return TRUE;
 }
 
 static void gui_destroy(GtkWidget *widget, gpointer data)
@@ -363,11 +380,10 @@ static void *gui_thread(void *args_)
 {
     struct thread_args *args = (struct thread_args *)args_;
 
-    gtk_init (args->argc, args->argv);
+    g_thread_init(NULL);
+    gdk_threads_init();
 
-    pthread_mutex_init(&slots_lock, NULL);
-    pthread_mutex_init(&statusbar_lock, NULL);
-    efd_init();
+    gtk_init (args->argc, args->argv);
 
     slotsModel = gtk_list_store_new(4, G_TYPE_POINTER, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_INT);
     { GtkTreeIter iter;
@@ -407,24 +423,29 @@ static void *gui_thread(void *args_)
     gtk_widget_show_all(window);
     gui_toggle_split_mode(NULL, (void *)0);
 
+    g_timeout_add(500, gui_refresh, NULL);
+
     pthread_mutex_lock(&args->lock);
-    pthread_cond_broadcast(&args->cond);
+    pthread_cond_signal(&args->cond);
     pthread_mutex_unlock(&args->lock);
-    
+
+    gdk_threads_enter();    
     gtk_main();
+    gdk_threads_leave();
 
     _exit(0); /* ugly. this is because globally-allocated displayslots will want to
                  de-degister themselves upon exit(), and since we won't be running
                  any more, they'll hang up. */
 }
 
-void gui_gtk_init(int *argc, char ***argv)
+void gui_init(int *argc, char ***argv)
 {
     pthread_t thr;
     struct thread_args args = {
         .argc = argc,
         .argv = argv
     };
+
 
     pthread_mutex_init(&args.lock, NULL);
     pthread_cond_init(&args.cond, NULL);
