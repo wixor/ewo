@@ -3,6 +3,7 @@
 
 #include <cstdlib>
 #include <cmath>
+#include <ctime>
 #include <cstring>
 #include <stdexcept>
 #include <pthread.h>
@@ -179,6 +180,17 @@ public:
 
         return R / (M[1][1]*M[0][0] - M[1][0]*M[0][1]);
     }
+};
+
+/* -------------------------------------------------------------------------- */
+
+class Timer {
+    struct timespec ts;
+    int clock;
+public:
+    Timer(int clock = CLOCK_THREAD_CPUTIME_ID) : clock(clock) { }
+    void start();
+    float end();
 };
 
 /* -------------------------------------------------------------------------- */
