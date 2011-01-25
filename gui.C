@@ -120,6 +120,7 @@ void DisplaySlot::drawSilhouettes(const std::vector<Matrix> &ms, float w, float 
         cairo_line_to(cr, q.x,q.y);
         cairo_line_to(cr, r.x,r.y);
         cairo_line_to(cr, s.x,s.y);
+        cairo_close_path(cr);
         cairo_stroke(cr);
     }
 }
