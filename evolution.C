@@ -8,6 +8,7 @@
 #include <sys/stat.h>
 #include <vector>
 #include <string>
+#include <bitset>
 #include <algorithm>
 #include <stdexcept>
 
@@ -27,6 +28,10 @@
 
 static void parsePOIScales(const char *value);
 static void parseSurvivalEq(const char *value);
+
+/* this is the size of bitset in Agent */
+#define MAX_POIS 128
+typedef std::bitset<MAX_POIS> mask_t;
 
 static int cfgThreads;
 static int cfgPOISteps;
@@ -176,8 +181,6 @@ public:
         ret.doBuild(filename);
         return ret;
     }
-
-    std::vector<POI> transformPOIs(const Matrix &M) const;
 };
 
 void Data::doBuild(const char *filename)
@@ -304,14 +307,6 @@ void Data::writeCache(const char *filename) const
     fclose(f);
 }
 
-std::vector<POI> Data::transformPOIs(const Matrix &M) const
-{
-    std::vector<POI> xfmd(pois.size());
-    for(int i=0; i<(int)pois.size(); i++)
-        xfmd[i] = M * pois[i];
-    return xfmd;
-}
-
 /* ------------------------------------------------------------------------ */
 
 class ImageDisplaySlot : public DisplaySlot
@@ -320,8 +315,8 @@ public:
     const Data *data;
     rgba color;
 
-    inline ImageDisplaySlot(const char *name, const Data *data = NULL, rgba color = rgba(0,0,0,0))
-        : DisplaySlot(name), data(data), color(color) { }
+    inline ImageDisplaySlot(const char *name, rgba color)
+        : DisplaySlot(name), color(color) { }
     virtual ~ImageDisplaySlot() { }
 
     virtual void draw()
@@ -342,14 +337,19 @@ public:
 class FitDisplaySlot : public DisplaySlot
 {
 public:
-    const Data *known; rgba knownColor;
-    const Data *alien; rgba alienColor;
+    const Data *known, *alien;
+    rgba knownActiveColor, knownInactiveColor, alienColor, silhouetteColor;
+    mask_t knownMask;
     std::vector<Matrix> ms;
 
-    inline FitDisplaySlot(const char *name,
-                          rgba knownColor = rgba(0,0,0,0),
-                          rgba alienColor = rgba(0,0,0,0)) :
-        DisplaySlot(name), known(NULL), knownColor(knownColor), alien(NULL), alienColor(alienColor) { }
+    inline FitDisplaySlot(const char *name) : DisplaySlot(name) 
+    {
+        known = alien = NULL;
+        knownActiveColor = rgba(0.1,1,0.1,0.5);
+        knownInactiveColor = rgba(0.0,.5,0.0,0.3);
+        alienColor = rgba(1,0.3,0.1,0.5);
+        silhouetteColor = rgba(.2,.5,1,.3);
+    }
 
     virtual ~FitDisplaySlot() { }
 
@@ -358,40 +358,40 @@ public:
         if(!known || !alien || ms.size() == 0)
             return;
 
-/*      struct timespec tstart, tend;
-        clock_gettime(CLOCK_THREAD_CPUTIME_ID, &tstart); */
+/*      Timer tim;
+        tim.start(); */
 
         resize(alien->raw.getWidth(), alien->raw.getHeight());
         drawImage(alien->caimg);
         drawDifference(known->caimg, ms[0]);
 
-        std::vector<Matrix> someMs;
-        for(int i=0; i<(int)ms.size(); i+=std::max(1, (int)ms.size()/30))
-            someMs.push_back(ms[i]);
-        drawSilhouettes(someMs, known->raw.getWidth(), known->raw.getHeight(), rgba(.2,.5,1,.3));
+        drawSilhouettes(ms, known->raw.getWidth(), known->raw.getHeight(), silhouetteColor);
         
         std::vector<Point> ps(alien->pois.begin(), alien->pois.end());
         drawDots(ps,6, alienColor);
 
-        ps.resize(known->pois.size());
+        ps.clear();
         for(int i=0; i<(int)known->pois.size(); i++)
-            ps[i] = ms[0] * known->pois[i];
-        drawDots(ps,6, knownColor);
+            if(knownMask[i])
+                ps.push_back(ms[0] * known->pois[i]);
+        drawDots(ps,6, knownActiveColor);
         
-/*      clock_gettime(CLOCK_THREAD_CPUTIME_ID, &tend);
-        long long p = 1000000000LL*tstart.tv_sec + tstart.tv_nsec,
-                  q = 1000000000LL*tend.tv_sec   + tend.tv_nsec,
-                  r = q-p;
-        debug("drawing took %d.%06d ms", (int)(r/1000000), (int)(r%1000000)); */
+        ps.clear();
+        for(int i=0; i<(int)known->pois.size(); i++)
+            if(!knownMask[i])
+                ps.push_back(ms[0] * known->pois[i]);
+        drawDots(ps,6, knownInactiveColor);
+        
+/*      debug("drawing took %.6f ms", tim.end()*1000.f); */
     }
 };
 
 /* those are created statically, however they will only initialize
  * themselves upon first action, which must occur after gtk_gui_init. */
 
-static ImageDisplaySlot knownDS("known image", NULL, rgba(0.1,1,0.1,0.5)),
-                        alienDS("alien image", NULL, rgba(1,0.3,0.1,0.5));
-static FitDisplaySlot   bestDS("best fit", rgba(0.1,1,0.1,0.5), rgba(1,0.3,0.1,0.5));
+static ImageDisplaySlot knownDS("known image", rgba(0.1,1,0.1,0.5)),
+                        alienDS("alien image", rgba(1,0.3,0.1,0.5));
+static FitDisplaySlot   bestDS("best fit");
 
 /* ------------------------------------------------------------------------ */
 
@@ -399,6 +399,7 @@ class Agent
 {
 public:
     Matrix M; /* the transformation matrix */
+    mask_t mask; /* which POIs to take into consideration */
     float target; /* target function */
     float fitness; /* population-wide fitness factor */
 
@@ -498,26 +499,48 @@ Population::EvaluationJob::~EvaluationJob() {
     /* empty */
 }
 
-/* dla każdego punktu z a najbliższy mu z b */
-static float matchPOIs(const std::vector<POI> &a, const std::vector<POI> &b)
-{
-    float sum = 0;
-    for(int i=0; i<(int)a.size(); i++)
-    {
-        float best = 1e+30;
-        for(int j=0; j<(int)b.size(); j++)
-            best = std::min(best, (a[i]-b[j]).dist());
-        sum += best;
-    }
-    return sum;
-}
 void Population::EvaluationJob::run()
 {
     const Data *alien = uplink->alien, *known = uplink->known;
 
-    std::vector<POI> xformed = known->transformPOIs(agent->M);
-    agent->target = -(matchPOIs(xformed, alien->pois) + matchPOIs(alien->pois, xformed)) /
-                     (alien->pois.size() + known->pois.size());
+    /* for each POI from known image that is allowed by agent's mask
+     * we look for closest POI from alien image. moreover, each alien
+     * POI can be used at most K times (this is to prevent matching
+     * all known POIs with one or two alien POIs). */
+    const char K = 2;
+    char cnts[alien->pois.size()]; /* here we count each use of an alien poi */
+    memset(cnts, 0, sizeof(cnts));
+
+    float sum = 0;
+    for(int i=0; i<(int)known->pois.size(); i++)
+    {
+        if(!agent->mask[i])
+            continue;
+
+        Point p = agent->M * known->pois[i];
+
+        int bestidx = -1; float bestdist = 1e+10f;
+        for(int j=0; j<(int)alien->pois.size(); j++)
+        {
+            if(cnts[j] >= K)
+                continue;
+            float dist = (p - alien->pois[j]).dist();
+            if(dist >= bestdist)
+                continue;
+            bestidx = j;
+            bestdist = dist;
+        }
+
+        if(bestidx != -1) {
+            cnts[bestidx]++;
+            sum += bestdist;
+        } else {
+            warn("cannot match poi %d", i);
+            sum += 1e+10f;
+        }
+    }
+
+    agent->target = -sum / (alien->pois.size() + known->pois.size());
 }
 void Population::evaluate()
 {
@@ -528,9 +551,10 @@ void Population::evaluate()
         jobs[i].completion = &c;
         jobs[i].agent = &pop[i];
         jobs[i].uplink = this;
-        aq->queue(&jobs[i]);
     }
 
+    for(int i=0; i<(int)pop.size(); i++)
+        aq->queue(&jobs[i]);
     c.wait();
 
     float minTarget = 1e+30;
@@ -570,6 +594,7 @@ int Population::roulette(int n)
 /* --- mutations */
 void Population::makeRandom(Agent *a)
 {
+    a->mask.set(); /* not too random for now */
     a->M = Matrix();
     a->translate(
             Random::real(cfgTranslateInit) * known->raw.getWidth(),
@@ -673,9 +698,10 @@ Agent Population::evolve()
 				   pop[0].dx(),pop[0].dy(),pop[0].sx(),pop[0].sy(),pop[0].alfa()/M_PI*180.0);
 
         bestDS.lock();
-        bestDS.ms.resize(pop.size());
-        for(int i=0; i<(int)pop.size(); i++)
-            bestDS.ms[i] = pop[i].M;
+        bestDS.ms.clear();
+        for(int i=0; i<(int)pop.size(); i+=std::max(1, (int)pop.size()/30))
+            bestDS.ms.push_back(pop[i].M);
+        bestDS.knownMask = pop[0].mask;
         bestDS.unlock();
 
         bestScores.push_back(pop[0].target);
