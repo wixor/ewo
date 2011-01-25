@@ -93,7 +93,7 @@ void DisplaySlot::drawDot(Point p, float d, rgba color)
     cairo_fill(cr);
 }
 
-void DisplaySlot::drawDots(std::vector<Point> ps, float d, rgba color)
+void DisplaySlot::drawDots(const std::vector<Point> &ps, float d, rgba color)
 {
     cairo_set_source_rgba(cr, 0,0,0,color.a);
     for(int i=0; i<(int)ps.size(); i++)
@@ -106,3 +106,22 @@ void DisplaySlot::drawDots(std::vector<Point> ps, float d, rgba color)
     cairo_fill(cr);
 }
 
+void DisplaySlot::drawSilhouettes(const std::vector<Matrix> &ms, float w, float h, rgba color)
+{
+    cairo_set_source_rgba(cr, color.r,color.g,color.b,color.a);
+    cairo_set_line_width(cr, 1);
+
+    for(int i=0; i<(int)ms.size(); i++) {
+        Point p = ms[i] * Point(0,0),
+              q = ms[i] * Point(w,0),
+              r = ms[i] * Point(w,h),
+              s = ms[i] * Point(0,h);
+        cairo_move_to(cr, p.x,p.y);
+        cairo_line_to(cr, q.x,q.y);
+        cairo_line_to(cr, r.x,r.y);
+        cairo_line_to(cr, s.x,s.y);
+        cairo_close_path(cr);
+    }
+
+    cairo_stroke(cr);
+}

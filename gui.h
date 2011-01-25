@@ -43,8 +43,8 @@ protected:
     inline void drawImage(CairoImage ci, const Matrix &m) { drawImage(ci, &m, false); }
     inline void drawDifference(CairoImage ci, const Matrix &m) { drawImage(ci, &m, true); }
     void drawDot(Point p, float d, rgba color);
-    void drawDots(std::vector<Point> ps, float d, rgba color);
-
+    void drawDots(const std::vector<Point> &ps, float d, rgba color);
+    void drawSilhouettes(const std::vector<Matrix> &ms, float w, float h, rgba color);
 
 public:
     DisplaySlot(const char *name);

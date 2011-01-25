@@ -4,6 +4,7 @@
 #include <cassert>
 #include <ctime>
 #include <ctype.h>
+#include <locale.h>
 #include <sys/stat.h>
 #include <vector>
 #include <string>
@@ -25,6 +26,7 @@
 /* ------------------------------------------------------------------------ */
 
 static void parsePOIScales(const char *value);
+static void parseSurvivalEq(const char *value);
 
 static int cfgThreads;
 static int cfgPOISteps;
@@ -33,11 +35,13 @@ static float cfgPOIThreshold;
 static float cfgPOITabuParam;
 static int cfgPOICount;
 static int cfgPopulationSize;
-static float cfgSurvivalRate;
-static int cfgStopCondParam, cfgMaxGeneration;
+static std::vector<float> cfgSurvivalEq;
+static int cfgStopCondParam, cfgMaxGenerations;
 static float cfgTranslateInit, cfgRotateInit, cfgScaleInit;
-static float cfgTranslateProp, cfgRotateProp, cfgScaleProp, cfgFlipProp;
-static float cfgTranslateDev, cfgRotateDev, cfgScaleDev;
+static float cfgTranslateProp,  cfgRotateProp,  cfgScaleProp, cfgFlipProp;
+static float cfgTranslateDev,   cfgRotateDev,   cfgScaleDev;
+static float cfgTranslateDev2,  cfgRotateDev2,  cfgScaleDev2;
+static float cfgTranslateMean2, cfgRotateMean2, cfgScaleMean2;
 static float cfgOriginDev;
 static float cfgDEMatingProp, cfgDEMatingCoeff, cfgDEMatingDev;
 
@@ -51,9 +55,9 @@ static struct config_var cfgvars[] = {
     { "poiTabuParam",   config_var::FLOAT,     &cfgPOITabuParam },
     /* evolution */
     { "populationSize", config_var::INT,       &cfgPopulationSize },
-    { "survivalRate",   config_var::FLOAT,     &cfgSurvivalRate },
+    { "survivalEq",     config_var::CALLBACK,  (void *)&parseSurvivalEq },
     { "stopCondParam",  config_var::INT,       &cfgStopCondParam },
-    { "maxGeneration",  config_var::INT,       &cfgMaxGeneration },
+    { "maxGenerations", config_var::INT,       &cfgMaxGenerations },
     /* initial population generation parameters */
     { "translateInit",  config_var::FLOAT,     &cfgTranslateInit },
     { "rotateInit",     config_var::FLOAT,     &cfgRotateInit },
@@ -66,6 +70,12 @@ static struct config_var cfgvars[] = {
     { "translateDev",   config_var::FLOAT,     &cfgTranslateDev },
     { "rotateDev",      config_var::FLOAT,     &cfgRotateDev },
     { "scaleDev",       config_var::FLOAT,     &cfgScaleDev },
+    { "translateMean2", config_var::FLOAT,     &cfgTranslateMean2 },
+    { "rotateMean2",    config_var::FLOAT,     &cfgRotateMean2 },
+    { "scaleMean2",     config_var::FLOAT,     &cfgScaleMean2 },
+    { "translateDev2",  config_var::FLOAT,     &cfgTranslateDev2 },
+    { "rotateDev2",     config_var::FLOAT,     &cfgRotateDev2 },
+    { "scaleDev2",      config_var::FLOAT,     &cfgScaleDev2 },
     /* standard deviation of rotation/scaling origin from the median point */
     { "originDev",      config_var::FLOAT,     &cfgOriginDev },
     /* differential evolution mating settings */
@@ -76,16 +86,17 @@ static struct config_var cfgvars[] = {
     { NULL,             config_var::NONE,      NULL }
 };
 
-static void parsePOIScales(const char *value)
+static std::vector<float> parseFloatVector(const char *value)
 {
+    std::vector<float> ret;
     while(*value)
     {
         char *end;
         float v = strtof(value, &end);
         if(end == value)
-            throw std::runtime_error("failed to parse scales");
+            throw std::runtime_error("failed to parse float");
         
-        cfgPOIScales.push_back(v);
+        ret.push_back(v);
 
         while(isspace(*end)) end++;
         if(*end == ',') end++;
@@ -93,6 +104,14 @@ static void parsePOIScales(const char *value)
 
         value = end;
     }
+    return ret;
+}
+
+static void parsePOIScales(const char *value) {
+    cfgPOIScales = parseFloatVector(value);
+}
+static void parseSurvivalEq(const char *value) {
+    cfgSurvivalEq = parseFloatVector(value);
 }
 
 /* ------------------------------------------------------------------------ */
@@ -112,11 +131,14 @@ public:
     static inline float real(float max) {
         return coin() ? positive(max) : -positive(max);
     }
-    static inline float gaussian(float mean, float deviation) {
+    static float gaussian(float mean, float deviation) {
         /* Box-Muller transform ftw ;) */
         float p = positive(1), q = positive(1);
         float g = sqrtf(-2.0f * logf(p)) * cosf(2.0f*M_PI*q);
         return g*deviation + mean;
+    }
+    static float trigauss(float m1, float d1, float m2, float d2) {
+        return (gaussian(m1,d1) + gaussian(m2,d2) + gaussian(-m2,d2))/3.f;
     }
 };
 
@@ -322,19 +344,18 @@ class FitDisplaySlot : public DisplaySlot
 public:
     const Data *known; rgba knownColor;
     const Data *alien; rgba alienColor;
-    Matrix m;
+    std::vector<Matrix> ms;
 
     inline FitDisplaySlot(const char *name,
-                          const Data *known = NULL, rgba knownColor = rgba(0,0,0,0),
-                          const Data *alien = NULL, rgba alienColor = rgba(0,0,0,0),
-                          const Matrix &m = Matrix()) :
-        DisplaySlot(name), known(known), knownColor(knownColor), alien(alien), alienColor(alienColor), m(m) { }
+                          rgba knownColor = rgba(0,0,0,0),
+                          rgba alienColor = rgba(0,0,0,0)) :
+        DisplaySlot(name), known(NULL), knownColor(knownColor), alien(NULL), alienColor(alienColor) { }
 
     virtual ~FitDisplaySlot() { }
 
     virtual void draw()
     {
-        if(!known || !alien)
+        if(!known || !alien || ms.size() == 0)
             return;
 
 /*        struct timespec tstart, tend;
@@ -342,16 +363,19 @@ public:
 
         resize(alien->raw.getWidth(), alien->raw.getHeight());
         drawImage(alien->caimg);
-        drawDifference(known->caimg, m);
+        drawDifference(known->caimg, ms[0]);
+
+        std::vector<Matrix> someMs;
+        for(int i=0; i<(int)ms.size(); i+=std::max(1, (int)ms.size()/30))
+            someMs.push_back(ms[i]);
+        drawSilhouettes(someMs, known->raw.getWidth(), known->raw.getHeight(), rgba(.2,.5,1,.3));
         
-        std::vector<Point> ps(alien->pois.size());
-        for(int i=0; i<(int)alien->pois.size(); i++)
-            ps[i] = alien->pois[i];
+        std::vector<Point> ps(alien->pois.begin(), alien->pois.end());
         drawDots(ps,6, alienColor);
 
         ps.resize(known->pois.size());
         for(int i=0; i<(int)known->pois.size(); i++)
-            ps[i] = m * known->pois[i];
+            ps[i] = ms[0] * known->pois[i];
         drawDots(ps,6, knownColor);
         
 /*      clock_gettime(CLOCK_THREAD_CPUTIME_ID, &tend);
@@ -367,7 +391,7 @@ public:
 
 static ImageDisplaySlot knownDS("known image", NULL, rgba(0.1,1,0.1,0.5)),
                         alienDS("alien image", NULL, rgba(1,0.3,0.1,0.5));
-static FitDisplaySlot   bestDS("best fit", NULL, rgba(0.1,1,0.1,0.5), NULL, rgba(1,0.3,0.1,0.5));
+static FitDisplaySlot   bestDS("best fit", rgba(0.1,1,0.1,0.5), rgba(1,0.3,0.1,0.5));
 
 /* ------------------------------------------------------------------------ */
 
@@ -436,6 +460,9 @@ class Population
     /* history record of best scores, one entry per generation */
     std::vector<float> bestScores;
 
+    /* current generation number */
+    int generationNumber;
+
     /* population evaluation (multi-threaded) */
     class EvaluationJob : public AsyncJob
     {
@@ -457,6 +484,9 @@ class Population
 
     /* one needs to know when to stop! */
     inline bool terminationCondition() const;
+
+    /* how many specimen will advance to the next generation */
+    float getSurvivalRate() const;
 
 public:
     Population(const Data *known, const Data *alien);
@@ -555,23 +585,23 @@ void Population::mutation(Agent *a)
           h = known->raw.getHeight();
 
     if(Random::maybe(cfgTranslateProp))
-        a->translate(Random::gaussian(0, cfgTranslateDev) * w,
-                     Random::gaussian(0, cfgTranslateDev) * h);
+        a->translate(Random::trigauss(0, cfgTranslateDev, cfgTranslateMean2, cfgTranslateDev2) * w,
+                     Random::trigauss(0, cfgTranslateDev, cfgTranslateMean2, cfgTranslateDev2) * h);
 
     if(Random::maybe(cfgRotateProp))
-        a->rotate(Random::gaussian(0, cfgRotateDev),
+        a->rotate(Random::trigauss(0, cfgRotateDev, cfgRotateMean2, cfgRotateDev2),
                   Random::gaussian(known->originX, cfgOriginDev * w),
                   Random::gaussian(known->originY, cfgOriginDev * h));
 
     if(Random::maybe(cfgScaleProp))
-        a->scale(Random::gaussian(1, cfgScaleDev),
-                 Random::gaussian(1, cfgScaleDev),
+        a->scale(1.f+Random::trigauss(0, cfgScaleDev, cfgScaleMean2, cfgScaleDev2),
+                 1.f+Random::trigauss(0, cfgScaleDev, cfgScaleMean2, cfgScaleDev2),
                  Random::gaussian(known->originX, cfgOriginDev * w),
                  Random::gaussian(known->originY, cfgOriginDev * h));
 
     if(Random::maybe(cfgFlipProp))
     {
-        float rangle = Random::real(6.28f),
+        float rangle = Random::real(2.f*M_PI),
               rx = Random::gaussian(known->originX, cfgOriginDev*w),
               ry = Random::gaussian(known->originY, cfgOriginDev*h);
         
@@ -589,8 +619,13 @@ void Population::deMating(Agent *a, const Agent *p, const Agent *q, const Agent 
     a->M = p->M + (q->M - r->M) * factor;
 }
 
+/* this tells us when to stop */
 bool Population::terminationCondition() const
 {
+    if(generationNumber > cfgMaxGenerations)
+        return true;
+
+    return false;
     const int K = cfgStopCondParam;
     if ((int)bestScores.size() < 2*K)
         return false;
@@ -600,6 +635,16 @@ bool Population::terminationCondition() const
           max2 = *std::max_element(bestScores.end()-2*K, bestScores.end()-K);
 
     return max2 >= max1;
+}
+
+/* how many specimen will make it to the next round */
+float Population::getSurvivalRate() const
+{
+    float v = 0, x = (float) (generationNumber-1) / (cfgMaxGenerations-1);
+    for(int i=0; i<(int)cfgSurvivalEq.size(); i++)
+        v = x*v + cfgSurvivalEq[i];
+    assert(v >= 0 && v <= 1);
+    return v;
 }
     
 /* --- the so called main loop */
@@ -616,24 +661,28 @@ Agent Population::evolve()
     Agent bestEver;
     bestEver.target = -1000000.0f;
 
-    for(int gencnt=1;;gencnt++)
+    for(generationNumber = 1; ; generationNumber++)
     {
         evaluate();
 
-		gui_status("gen: %d, best fit: target %.2f fitness %f  |  d=(%.0f,%.0f), s=(%.2f,%.2f), a=%.3f",
-			       gencnt,
+        float survivalRate = getSurvivalRate();
+
+		gui_status("gen: %d, survival: %d%%, best fit: target %.2f fitness %f  |  d=(%.0f,%.0f), s=(%.2f,%.2f), a=%.3f",
+			       generationNumber, (int)(survivalRate*100.f),
 				   pop[0].target, pop[0].fitness,
 				   pop[0].dx(),pop[0].dy(),pop[0].sx(),pop[0].sy(),pop[0].alfa()/M_PI*180.0);
 
         bestDS.lock();
-        bestDS.m = pop[0].M;
+        bestDS.ms.resize(pop.size());
+        for(int i=0; i<(int)pop.size(); i++)
+            bestDS.ms[i] = pop[i].M;
         bestDS.unlock();
 
         bestScores.push_back(pop[0].target);
         if (bestEver.target < pop[0].target)
             bestEver = pop[0];
         
-        int survivors = cfgSurvivalRate * pop.size();
+        int survivors = survivalRate * pop.size();
         for(int i=survivors; i<(int)pop.size(); i++)
             if(Random::maybe(cfgDEMatingProp))
             {
@@ -648,12 +697,23 @@ Agent Population::evolve()
         for(int i=0; i<(int)pop.size(); i++)
             mutation(&pop[i]);
         
-        if (terminationCondition() || gencnt >= cfgMaxGeneration) break;
+        if(terminationCondition()) break;
     }
     
     knownDS.lock(); knownDS.data = NULL; knownDS.unlock();
     alienDS.lock(); alienDS.data = NULL; alienDS.unlock();
-    bestDS.lock(); bestDS.known = bestDS.alien = NULL; bestDS.unlock();
+    bestDS.lock(); bestDS.known = bestDS.alien = NULL; bestDS.ms.clear(); bestDS.unlock();
+
+    {
+        static int cnt = 1;
+        char filename[32];
+        sprintf(filename, "evo-%d.log", cnt++);
+        FILE *log = fopen(filename, "w");
+        for(int i=0; i<(int)bestScores.size(); i++)
+            fprintf(log,"%.8f\n",bestScores[i]);
+        fclose(log);
+        info("log written to '%s'", filename);
+    }
 
     return bestEver;
 }
@@ -709,6 +769,7 @@ int main(int argc, char *argv[])
      * must go before looking at argc, argv and before
      * calling gui_upload, which is done by Data::build */
     gui_init(&argc, &argv);
+    setlocale(LC_ALL, "POSIX"); /* because glib thinks we should use comma as decimal separator... */
 
     /* check if there's enough command arguments */
     if (argc < 3) {
@@ -749,6 +810,7 @@ int main(int argc, char *argv[])
     bestDS.bind();
     
     /* read alien image */
+    gui_status("loading '%s'...", argv[1]);
     Data alien = Data::build(argv[1]);
 
     /* examine all known images */
@@ -757,6 +819,7 @@ int main(int argc, char *argv[])
     {
         const char *knownPath = knownPaths[i].c_str();
         okay("processing '%s'", knownPath);
+        gui_status("loading '%s'...", knownPath);
         Data known = Data::build(knownPath);
         Agent best = Population(&known, &alien).evolve();
         info("best score was %f", best.target);
