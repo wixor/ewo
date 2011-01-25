@@ -289,7 +289,6 @@ static void gui_free_pixmap(void *data)
 
     XFreePixmap(display, pixmap);
     
-    gdk_flush();
     gdk_threads_leave();
 }
 
@@ -321,7 +320,6 @@ cairo_surface_t *gui_do_upload(int width, int height, const void *bytes)
     cairo_paint(cr);
     cairo_destroy(cr);
 
-    gdk_flush();
     gdk_threads_leave();
 
     cairo_surface_destroy(source);

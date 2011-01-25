@@ -358,7 +358,7 @@ public:
         if(!known || !alien || ms.size() == 0)
             return;
 
-/*        struct timespec tstart, tend;
+/*      struct timespec tstart, tend;
         clock_gettime(CLOCK_THREAD_CPUTIME_ID, &tstart); */
 
         resize(alien->raw.getWidth(), alien->raw.getHeight());
