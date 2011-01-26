@@ -467,11 +467,14 @@ class Population
     /* population evaluation (multi-threaded) */
     class EvaluationJob : public AsyncJob
     {
+        void runOne(Agent *agent);
+
     public:
         Population *uplink;
-        Agent *agent;
+        int start, end;
         virtual ~EvaluationJob();
         virtual void run();
+
     };
     inline void evaluate();
 
@@ -500,6 +503,11 @@ Population::EvaluationJob::~EvaluationJob() {
 }
 
 void Population::EvaluationJob::run()
+{
+    for(int i=start; i<end; i++)
+        runOne(&uplink->pop[i]);
+}
+void Population::EvaluationJob::runOne(Agent *agent)
 {
     const Data *alien = uplink->alien, *known = uplink->known;
 
@@ -544,16 +552,19 @@ void Population::EvaluationJob::run()
 }
 void Population::evaluate()
 {
-    EvaluationJob jobs[pop.size()];
+    const int evalBatch = 50;
+    int nJobs = (pop.size() + evalBatch - 1) / evalBatch;
+    EvaluationJob jobs[nJobs];
     Completion c;
     
-    for(int i=0; i<(int)pop.size(); i++) {
+    for(int i=0; i<nJobs; i++) {
         jobs[i].completion = &c;
-        jobs[i].agent = &pop[i];
         jobs[i].uplink = this;
+        jobs[i].start = evalBatch*i;
+        jobs[i].end = std::min((int)pop.size(), evalBatch*(i+1));
     }
 
-    for(int i=0; i<(int)pop.size(); i++)
+    for(int i=0; i<nJobs; i++)
         aq->queue(&jobs[i]);
     c.wait();
 

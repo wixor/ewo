@@ -40,8 +40,10 @@ static GtkListStore *slotsModel;
 static GtkToolbar *toolbar;
 static GtkToolButton *single, *hsplit, *vsplit, *quad;
 
+static pthread_mutex_t statlock;
 static int statusbar_ctx;
 static GtkStatusbar *statusbar;
+static char *statmsg;
 
 /* ------------------------------------------------------------------------- */
 
@@ -264,15 +266,10 @@ void gui_status(const char *fmt, ...)
     char *buf; vasprintf(&buf, fmt, args);
     va_end(args);
 
-    gdk_threads_enter();
-    
-    gtk_statusbar_pop(statusbar, statusbar_ctx);
-    gtk_statusbar_push(statusbar, statusbar_ctx, buf);
-    
-    gdk_flush();
-    gdk_threads_leave();
-
-    free(buf);
+    pthread_mutex_lock(&statlock);
+    free(statmsg);
+    statmsg = buf;
+    pthread_mutex_unlock(&statlock);
 }
 
 static cairo_user_data_key_t gui_free_pixmap_key;
@@ -324,8 +321,12 @@ static gboolean gui_refresh(gpointer data)
 
     for(int i=0; i<4; i++)
         displayarea_refresh(&areas[i]);
+    
+    gtk_statusbar_pop(statusbar, statusbar_ctx);
+    pthread_mutex_lock(&statlock);
+    gtk_statusbar_push(statusbar, statusbar_ctx, statmsg);
+    pthread_mutex_unlock(&statlock);
 
-    gdk_flush();
     gdk_threads_leave();
     return TRUE;
 }
@@ -386,8 +387,10 @@ static void *gui_thread(void *args_)
     displayarea_init(&areas[2]);
     displayarea_init(&areas[3]);
 
+    pthread_mutex_init(&statlock, NULL);
     statusbar = GTK_STATUSBAR(gtk_statusbar_new());
     statusbar_ctx = gtk_statusbar_get_context_id(statusbar,"");
+    statmsg = strdup("");
 
     toolbar = GTK_TOOLBAR(gtk_toolbar_new());
     gtk_toolbar_set_style(GTK_TOOLBAR(toolbar), GTK_TOOLBAR_ICONS);
