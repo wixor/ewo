@@ -1,6 +1,25 @@
-#include <cstdio>
+#include <ctime>
 #include <pthread.h>
-#include "workers.h"
+
+#include "util.h"
+
+/* ----------------------------------------------------------------------- */
+
+void Timer::start(void) {
+    clock_gettime(clock, &ts);
+}
+
+float Timer::end(void) {
+    struct timespec now;
+    clock_gettime(clock, &now);
+    if(now.tv_nsec < ts.tv_nsec)
+        now.tv_nsec += 1000000000, now.tv_sec -= 1;
+    now.tv_nsec -= ts.tv_nsec;
+    now.tv_sec -= ts.tv_sec;
+    return (float)now.tv_sec + 0.000000001f*now.tv_nsec;
+}
+
+/* ----------------------------------------------------------------------- */
 
 Completion::Completion(void)
 {
@@ -37,8 +56,6 @@ void Completion::wait(void)
         pthread_cond_wait(&cond, &mutex);
     pthread_mutex_unlock(&mutex);
 }
-
-/* ----------------------------------------------------------------------- */
 
 AsyncJob::~AsyncJob(void)
 {
@@ -90,19 +107,8 @@ AsyncJob *AsyncQueue::get(void)
     return job;
 }
 
-/* ----------------------------------------------------------------------- */
-
-static void* run_worker_thread(void * arg) {
-    ((WorkerThread *)arg)->run();
-    return NULL;
-}
-
 WorkerThread::WorkerThread(AsyncQueue *queue) {
     this->queue = queue;
-}
-
-void WorkerThread::start(void) {
-    pthread_create(&thread, NULL, run_worker_thread, this);
 }
 
 void WorkerThread::run(void)
@@ -115,7 +121,13 @@ void WorkerThread::run(void)
     }
 }
 
-/* ----------------------------------------------------------------------- */
+static void* run_worker_thread(void * arg) {
+    ((WorkerThread *)arg)->run();
+    return NULL;
+}
+void WorkerThread::start(void) {
+    pthread_create(&thread, NULL, run_worker_thread, this);
+}
 
 AsyncQueue *aq;
 

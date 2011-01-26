@@ -1,55 +1,78 @@
 #ifndef __IMAGE_H__
 #define __IMAGE_H__
 
+#include <stdint.h>
 #include <cstdlib>
 #include <cstring>
-#include <cmath>
-#include <stdint.h>
+#include <cassert>
 #include <stdexcept>
 
-template <typename T> class Array2D
+#include <cairo.h>
+#include <cairo-xlib.h>
+
+#include "util.h"
+
+/* stuff in image.c */
+extern "C" {
+    int img_read(const char *filename, int *widthp, int *heightp, uint8_t **bytesp);
+    int img_write(const char *filename, int width, int height, const uint8_t *bytes);
+    uint32_t img_checksum(int width, int height, const uint8_t *bytes);
+};
+
+/* smart-ass wrapper for cairo_surface_t employing cairo's reference counting.
+ * do not use pointers or references to CairoImage, use only values
+ * (that means no CairoImage* or CairoImage&, just pure CairoImage).
+ * 
+ * CairoImages are created by uploading image data to the X server.
+ * you can obtain CairoImage from Image using gui_upload (see gui.h). */
+class CairoImage
 {
-protected:
-    int width, height;
-    T *data;
+    cairo_surface_t *surface;
 
-    inline void _init() { width = height = 0; data = NULL; }
 public:
-    inline Array2D() { _init(); }
-    inline Array2D(int w, int h) { _init(); resize(w,h); }
-    inline Array2D(const Array2D<T> &im) { _init(); (*this) = im; }
-    inline ~Array2D() { free(data); }
-    
-    inline T* operator[](int row) const { return data + row*width; }
+    inline CairoImage() : surface(NULL) { }
+    inline CairoImage(cairo_surface_t *surface) : surface(surface) { }
+    inline CairoImage(const CairoImage &ci) : surface(ci.surface) { cairo_surface_reference(surface); }
+    inline ~CairoImage() { if(surface) cairo_surface_destroy(surface); }
 
-    inline void resize(int w, int h)
+    inline CairoImage& operator=(const CairoImage &ci)
     {
-        if(width == w && height == h)
-            return;
-        width = w; height = h;
-        data = (T *)realloc(data, width*height*sizeof(T));
-        if(!data) throw std::bad_alloc();
-    }
-
-    inline Array2D<T>& operator=(const Array2D<T>& im)
-    {
-        resize(im.width, im.height);
-        memcpy(data, im.data, width*height*sizeof(T));
+        if(surface) cairo_surface_destroy(surface);
+        surface = ci.surface;
+        cairo_surface_reference(surface);
         return *this;
     }
     
-    inline int getWidth() const { return width; }
-    inline int getHeight() const { return height; }
-    inline bool inside(int x, int y) const { return x>=0 && y>=0 && x<width && y<height; }
+    operator cairo_surface_t* () const { return surface; }
+
+    inline int getWidth() {
+        switch(cairo_surface_get_type(surface)) {
+            case CAIRO_SURFACE_TYPE_IMAGE: return cairo_image_surface_get_width(surface);
+            case CAIRO_SURFACE_TYPE_XLIB:  return cairo_xlib_surface_get_width(surface);
+            default: assert("unknown surface type"); abort();
+        }
+    }
+
+    inline int getHeight() {
+        switch(cairo_surface_get_type(surface)) {
+            case CAIRO_SURFACE_TYPE_IMAGE: return cairo_image_surface_get_height(surface);
+            case CAIRO_SURFACE_TYPE_XLIB:  return cairo_xlib_surface_get_height(surface);
+            default: assert("unknown surface type"); abort();
+        }
+    }
 };
 
+/* our images
+ * you can load and save to pgm's, png's and jpeg's.
+ * however bear in mind that when loading colour images, only the red channel is used! */
 class Image : public Array2D<uint8_t>
 {
 public:
-    inline Image() { }
+    inline Image() : Array2D<uint8_t>() { }
     inline Image(int w, int h) : Array2D<uint8_t>(w, h) {}
     inline Image(const Image& im) : Array2D<uint8_t>(im) {}
         
+<<<<<<< HEAD
     static Image readPGM(FILE *file);
     static Image readPGM(const char *filename);
     void writePGM(FILE* file) const;
@@ -122,71 +145,29 @@ public:
     }
 
     inline Matrix33 operator+(const Matrix33 &M) const
+=======
+    inline static Image read(const char *filename)
+>>>>>>> 81f22aaf48f8863ad93630b916ebad3984e7abda
     {
-        const Matrix33 &me = *this;
-        Matrix33 ret;
-        for (int i=0; i<3; i++)
-            for (int j=0; j<3; j++)
-                ret[i][j] = me[i][j]+M[i][j];
-        return ret;
-    }
-    inline Matrix33 operator-(const Matrix33 &M) const
-    {
-        const Matrix33 &me = *this;
-        Matrix33 ret;
-        for (int i=0; i<3; i++)
-            for (int j=0; j<3; j++)
-                ret[i][j] = me[i][j]-M[i][j];
-        return ret;
-    }
-    inline Matrix33 operator*(float k) const
-    {
-        const Matrix33 &me = *this;
-        Matrix33 ret;
-        for (int i=0; i<3; i++)
-            for (int j=0; j<3; j++)
-                ret[i][j] = me[i][j]*k;
+        Image ret;
+        if(img_read(filename, &ret.width,&ret.height,&ret.data) == -1)
+            throw std::runtime_error("failed to read image");
         return ret;
     }
 
-    inline POI operator*(const POI &p) const
+    inline void write(const char* filename) const
     {
-        const Matrix33 &me = *this;
-        return POI(me[0][0]*p.x + me[0][1]*p.y + me[0][2], 
-                   me[1][0]*p.x + me[1][1]*p.y + me[1][2],
-                   p.val);
+        if(img_write(filename, width,height,data) == -1)
+            throw std::runtime_error("failed to write image");
     }
 
-    inline Matrix33 operator*(const Matrix33 &M) const
-    {
-        const Matrix33 &me = *this;
-        Matrix33 ret;
-        for (int i=0; i<3; i++)
-            for (int j=0; j<3; j++)
-                ret[i][j] = me[i][0]*M[0][j] + me[i][1]*M[1][j] + me[i][2]*M[2][j];
-        return ret;
+    inline void fill(uint8_t with) {
+        memset(data, with, width*height);
     }
 
-    inline Matrix33 inverse() const /* hell, yeah! */ /* but.. why? */
-    {
-        const Matrix33 &M = *this;
-        Matrix33 R;
-
-        R[0][0] = M[1][1]*M[2][2] - M[1][2]*M[2][1];
-        R[1][0] = M[1][2]*M[2][0] - M[1][0]*M[2][2];
-        R[2][0] = M[1][0]*M[2][1] - M[1][1]*M[2][0];
-
-        R[0][1] = M[0][2]*M[2][1] - M[0][1]*M[2][2];
-        R[1][1] = M[0][0]*M[2][2] - M[0][2]*M[2][0];
-        R[2][1] = M[0][1]*M[2][0] - M[0][0]*M[2][1];
-
-        R[0][2] = M[0][1]*M[1][2] - M[0][2]*M[1][1];
-        R[1][2] = M[0][2]*M[1][0] - M[0][0]*M[1][2];
-        R[2][2] = M[0][0]*M[1][1] - M[0][1]*M[1][0];
-
-        return R * (1./(R[0][0]*M[0][0] + R[1][0]*M[0][1] + R[2][0]*M[0][2]));
+    inline uint32_t checksum() const {
+        return img_checksum(width,height,data);
     }
 };
-
 
 #endif

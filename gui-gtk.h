@@ -2,45 +2,41 @@
 #define __GTK_GUI_H__
 
 #include <pthread.h>
+#include <cairo.h>
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-enum {
-    DS_INIT = 1,
-    DS_UPDATE = 2,
-    DS_RENAME = 4,
-    DS_RECAPTION = 8,
-    DS_BIND = 16,
-    DS_UNBIND = 32,
-    DS_CLEANUP = 64,
+#ifndef __GTK_H__
+struct _GtkTreeIter {
+    int stamp;
+    void *user_data, *user_data2, *user_data3;
 };
-
-#ifndef CAIRO_H
-typedef struct _cairo_surface cairo_surface_t;
+typedef struct _GtkTreeIter GtkTreeIter;
 #endif
 
 struct displayslot
 {
-    int events; /* events queued up to this point */
-    char *name, *caption;
-    cairo_surface_t *cr_surface;
+    pthread_mutex_t mutex;
 
-    struct {
-        int stamp;
-        void *user_data, *user_data2, *user_data3;
-    } iter; /* GtkTreeIter */
+    cairo_t *cr;
+    int width, height;
+    const char *name;
 
-    pthread_mutex_t lock;
-    pthread_cond_t cond;
+    GtkTreeIter iter;
 };
 
-void gui_gtk_poke();
-void gui_gtk_status(const char *fmt, ...);
-void gui_gtk_register(struct displayslot *ds);
-void gui_gtk_unregister(struct displayslot *ds);
-void gui_gtk_init(int *argc, char ***argv);
+void gui_register(struct displayslot *);
+void gui_unregister(struct displayslot *);
+void gui_bind(struct displayslot *);
+void gui_unbind(struct displayslot *);
+
+/* do not use this, see gui_upload from gui.h */
+cairo_surface_t *gui_do_upload(int width, int height, const void *bytes);
+
+void gui_status(const char *fmt, ...);
+void gui_init(int *argc, char ***argv);
 
 #ifdef __cplusplus
 } /* extern "C" */

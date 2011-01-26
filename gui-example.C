@@ -1,28 +1,52 @@
 #include <unistd.h>
+#include <vector>
 
+#include "util.h"
 #include "image.h"
+#include "poi.h"
 #include "gui.h"
+
+class ColorSlot : public DisplaySlot {
+public:
+    rgba color;
+    ColorSlot(const char *name) : DisplaySlot(name) { }
+    ColorSlot(const char *name, rgba color) : DisplaySlot(name), color(color) { }
+    virtual ~ColorSlot() { }
+    virtual void draw() {
+        fill(color);
+    }
+};
+
+class ImageSlot : public DisplaySlot {
+public:
+    CairoImage ci;
+    Matrix m;
+
+    ImageSlot(const char *name) : DisplaySlot(name) { }
+    ImageSlot(const char *name, CairoImage ci) : DisplaySlot(name), ci(ci) { }
+    ImageSlot(const char *name, CairoImage ci, Matrix m) : DisplaySlot(name), ci(ci), m(m) { }
+    virtual ~ImageSlot() { }
+    virtual void draw() {
+        resize(ci.getWidth(), ci.getHeight());
+        drawImage(ci, m);
+    }
+};
 
 int main(int argc, char *argv[])
 {
-    gui_gtk_init(&argc, &argv);
-    
-    {    
-        DisplaySlot ds("");
-        ds.rename("moj display slot numer %d", 42);
-        ds.recaption("ma adres %p", &ds);
+    gui_init(&argc, &argv);
 
-        Image im(256,192);
+    Image im = Image::read(argv[1]);
 
-        for(int i=0; i<256; i++)
-        {
-            for(int y=0;y<192;y++)
-                for(int x=0;x<256;x++)
-                    im[y][x] = (((y>>5)^(x>>5))&7) == (i&7) ? 0x01 : 0x00;
-            ds.update(im);
-            usleep(250000);
-        }
-    }
+    CairoImage ci = gui_upload(im);
+
+    ColorSlot red("red", rgba(1,0,0)),
+              green("green", rgba(0,1,0));
+    ImageSlot ims("image", ci, Matrix::rotation(.2));
+
+    red.activate();
+    green.activate();
+    ims.activate();
 
     pause();
 

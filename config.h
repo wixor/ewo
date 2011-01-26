@@ -1,6 +1,7 @@
 #ifndef __CONFIG_H__
 #define __CONFIG_H__
 
+#include <cstdlib>
 #include <cstdio>
 
 struct config_var
