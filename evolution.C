@@ -143,7 +143,7 @@ public:
         return g*deviation + mean;
     }
     static float trigauss(float m1, float d1, float m2, float d2) {
-        return (gaussian(m1,d1) + gaussian(m2,d2) + gaussian(-m2,d2))/3.f;
+        return (gaussian(m1,d1) + gaussian(m1+m2,d2) + gaussian(m1-m2,d2))/3.f;
     }
 };
 
@@ -619,8 +619,8 @@ void Population::mutation(Agent *a)
                   Random::gaussian(known->originY, cfgOriginDev * h));
 
     if(Random::maybe(cfgScaleProp))
-        a->scale(1.f+Random::trigauss(0, cfgScaleDev, cfgScaleMean2, cfgScaleDev2),
-                 1.f+Random::trigauss(0, cfgScaleDev, cfgScaleMean2, cfgScaleDev2),
+        a->scale(Random::trigauss(1, cfgScaleDev, cfgScaleMean2, cfgScaleDev2),
+                 Random::trigauss(1, cfgScaleDev, cfgScaleMean2, cfgScaleDev2),
                  Random::gaussian(known->originX, cfgOriginDev * w),
                  Random::gaussian(known->originY, cfgOriginDev * h));
 
