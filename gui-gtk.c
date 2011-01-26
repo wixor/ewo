@@ -9,13 +9,9 @@
 #include <unistd.h>
 #include <sys/eventfd.h>
 
-#include <X11/Xlib.h>
-#include <X11/Xutil.h>
 #include <gtk/gtk.h>
-#include <gdk/gdkx.h>
 
 #include <cairo.h>
-#include <cairo-xlib.h>
 
 #include "gui-gtk.h"
 
@@ -281,14 +277,7 @@ static cairo_user_data_key_t gui_free_pixmap_key;
 static void gui_free_pixmap(void *data)
 {
     gdk_threads_enter();
-
-    Display *display =
-        gdk_x11_get_default_xdisplay();
-    Pixmap pixmap =
-        cairo_xlib_surface_get_drawable((cairo_surface_t *)data);
-
-    XFreePixmap(display, pixmap);
-    
+    g_object_unref(G_OBJECT(data));
     gdk_threads_leave();
 }
 
@@ -300,24 +289,17 @@ cairo_surface_t *gui_do_upload(int width, int height, const void *bytes)
 
     gdk_threads_enter();
 
-    Display *display =
-        gdk_x11_get_default_xdisplay();
-    Window root =
-        XDefaultRootWindow(display);
-    Visual *vis =
-        gdk_x11_visual_get_xvisual(
-            gdk_visual_get_best_with_both(24, GDK_VISUAL_TRUE_COLOR));
-    
-    Pixmap pixmap =
-        XCreatePixmap(display, root, width, height, 24);
-    cairo_surface_t *surface =
-        cairo_xlib_surface_create(display, pixmap, vis, width, height);
-    
-    cairo_surface_set_user_data(surface, &gui_free_pixmap_key, surface, gui_free_pixmap);
+    GdkPixmap *pixmap = gdk_pixmap_new(NULL, width, height, 24);
 
-    cairo_t *cr = cairo_create(surface);
+    cairo_t *cr = gdk_cairo_create(GDK_DRAWABLE(pixmap));
+    
+    cairo_surface_t *surface = cairo_get_target(cr);
+    cairo_surface_reference(surface);
+    cairo_surface_set_user_data(surface, &gui_free_pixmap_key, pixmap, gui_free_pixmap);
+    
     cairo_set_source_surface(cr, source, 0,0);
     cairo_paint(cr);
+    
     cairo_destroy(cr);
 
     gdk_threads_leave();
