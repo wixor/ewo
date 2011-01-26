@@ -650,7 +650,7 @@ bool Population::terminationCondition() const
     if(generationNumber > cfgMaxGenerations)
         return true;
 
-    return false;
+    return false; /* na razie wylaczony */
     const int K = cfgStopCondParam;
     if ((int)bestScores.size() < 2*K)
         return false;
@@ -685,6 +685,9 @@ Agent Population::evolve()
 
     Agent bestEver;
     bestEver.target = -1000000.0f;
+    
+    std::vector<std::vector<float> > logVector;
+    static const int LOGperGEN = 10;
 
     for(generationNumber = 1; ; generationNumber++)
     {
@@ -708,6 +711,13 @@ Agent Population::evolve()
         if (bestEver.target < pop[0].target)
             bestEver = pop[0];
         
+        {
+            logVector.push_back(std::vector<float>(10));
+            logVector.back()[0] = pop[0].target;
+            for (int i=1; i<LOGperGEN; i++)
+                logVector.back()[i] = pop[rand()%pop.size()/2].target;
+        }
+        
         int survivors = survivalRate * pop.size();
         for(int i=survivors; i<(int)pop.size(); i++)
             if(Random::maybe(cfgDEMatingProp))
@@ -723,6 +733,8 @@ Agent Population::evolve()
         for(int i=0; i<(int)pop.size(); i++)
             mutation(&pop[i]);
         
+        usleep(5000);
+        
         if(terminationCondition()) break;
     }
     
@@ -735,8 +747,11 @@ Agent Population::evolve()
         char filename[32];
         sprintf(filename, "evo-%d.log", cnt++);
         FILE *log = fopen(filename, "w");
-        for(int i=0; i<(int)bestScores.size(); i++)
-            fprintf(log,"%.8f\n",bestScores[i]);
+        static const int GENtoSTARTwith = 10;
+        // for(int i=0; i<(int)bestScores.size(); i++) fprintf(log,"%.8f\n",bestScores[i]);
+        for (int i=GENtoSTARTwith; i<(int)logVector.size(); i++)
+            for (int j=0; j<LOGperGEN; j++)
+                fprintf(log, "%d %.8f\n", i, logVector[i][j]);
         fclose(log);
         info("log written to '%s'", filename);
     }
