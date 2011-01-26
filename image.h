@@ -72,7 +72,6 @@ public:
     inline Image(int w, int h) : Array2D<uint8_t>(w, h) {}
     inline Image(const Image& im) : Array2D<uint8_t>(im) {}
         
-<<<<<<< HEAD
     static Image readPGM(FILE *file);
     static Image readPGM(const char *filename);
     void writePGM(FILE* file) const;
@@ -144,10 +143,8 @@ public:
         return ret;
     }
 
-    inline Matrix33 operator+(const Matrix33 &M) const
-=======
+    // inline Matrix33 operator+(const Matrix33 &M) const
     inline static Image read(const char *filename)
->>>>>>> 81f22aaf48f8863ad93630b916ebad3984e7abda
     {
         Image ret;
         if(img_read(filename, &ret.width,&ret.height,&ret.data) == -1)
