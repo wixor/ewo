@@ -108,7 +108,21 @@ public:
         ret[0][0] = sx; ret[1][1] = sy;
         return ret;
     }
-
+    
+    inline Matrix reverse()
+    {
+        float a=data[0],b=data[1],c=data[2],d=data[3],e=data[4],f=data[5];
+        float det = a*e-b*d;
+        Matrix ret;
+        ret[0][0] = e/det;
+        ret[0][1] = - b/det;
+        ret[0][2] = (b*f-c*e)/det;
+        
+        ret[1][0] = - d/det;
+        ret[1][1] = a/det;
+        ret[1][2] = - (a*f-c*d)/det;
+        return ret;
+    }
     inline Matrix operator+(const Matrix &M) const
     {
         const Matrix &me = *this;
