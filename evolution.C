@@ -749,10 +749,12 @@ void Population::makeRandom(Agent *a)
     a->rotate(Random::real(cfgRotateInit),
             known->originX, known->originY);
     a->scale(
-        (1.f+Random::real(cfgScaleInit))
+        /*(1.f/Random::positive(cfgScaleInit))
             * Random::randomSign(),
-        (1.f+Random::real(cfgScaleInit))
-            * Random::randomSign(),
+        (1.f/Random::positive(cfgScaleInit))
+            * Random::randomSign(),*/
+        Random::real(cfgScaleInit),
+        Random::real(cfgScaleInit),
         known->originX, known->originY);
 }
 void Population::mutation(Agent *a)
