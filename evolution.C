@@ -24,7 +24,7 @@
 #define fail(fmt, ...)  printf("!! " fmt "\n", ## __VA_ARGS__)
 #define debug(fmt, ...) printf(".. " fmt "\n", ## __VA_ARGS__)
 
-#define TRYCHOICE 1
+#define TRYCHOICE 0
 
 #define INF 1e8f
 
@@ -661,7 +661,7 @@ void Population::EvaluationJob::runOne(Agent *agent)
     if (takenRatio < cfgMinTakenPoints)
         agent->target += INF;
         
-    /*TEST*/if ((which++)%50 == 0) 
+    /*TEST*/if ((which++)%5000 == 0) 
         debug("%d vs %d: dist=%.3f+%.3f, valid=%d\n", aliens.size()*agent->validCnt, oper, dist, dist2, agent->validCnt);
 }
 void Population::evaluate()
