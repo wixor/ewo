@@ -25,6 +25,10 @@ inline POI operator*(const Matrix &M, const POI &p) {
     return POI(M * (Point)p, p.val);
 }
 
+inline bool compX(const POI &p, const POI &q) {
+    return p.x != q.x ? p.x < q.x : p.y < q.y;
+}
+
 Array2D<float> evaluateImage(const Image &src, int steps, const std::vector<float> &scales);
 Image reduceEvaluationToImage(const Array2D<float> &eval);
 std::vector<POI> findPOIs(const Array2D<float> &eval, float threshold, int count, float param);

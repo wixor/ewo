@@ -24,6 +24,10 @@
 #define fail(fmt, ...)  printf("!! " fmt "\n", ## __VA_ARGS__)
 #define debug(fmt, ...) printf(".. " fmt "\n", ## __VA_ARGS__)
 
+#define TRYCHOICE 1
+
+#define INF 1e8f
+
 /* ------------------------------------------------------------------------ */
 
 static void parsePOIScales(const char *value);
@@ -50,6 +54,9 @@ static float cfgTranslateMean2, cfgRotateMean2, cfgScaleMean2;
 static float cfgOriginDev;
 static float cfgDEMatingProp, cfgDEMatingCoeff, cfgDEMatingDev;
 static float cfgMaxScaleRatio;
+static float cfgMinTakenPoints = 0.15;
+static float cfgChoiceProp = 0.2;
+static float cfgChoiceDev = 3;
 
 
 static struct config_var cfgvars[] = {
@@ -202,7 +209,7 @@ void Data::doBuild(const char *filename)
         findOrigin(); 
         writeCache(filename);
     }
-
+    std::sort(pois.begin(), pois.end(), compX);
     caimg = gui_upload(raw);
 }
 
@@ -352,8 +359,8 @@ public:
     inline FitDisplaySlot(const char *name) : DisplaySlot(name) 
     {
         known = alien = NULL;
-        knownActiveColor = rgba(0.1,1,0.1,0.5);
-        knownInactiveColor = rgba(0.0,.5,0.0,0.3);
+        knownActiveColor = rgba(0.1, 1, 0.1, 0.5);
+        knownInactiveColor = rgba(.7, .7, .7, 0.7);
         alienColor = rgba(1,0.3,0.1,0.5);
         silhouetteColor = rgba(.2,.5,1,.3);
     }
@@ -407,6 +414,8 @@ class Agent
 public:
     Matrix M; /* the transformation matrix */
     
+    int validCnt;
+    
     int mx, Mx, my, My; /* upper and lower bounds for points that are taken into consideration */
     mask_t mask; /* it might be useful */
     
@@ -423,7 +432,10 @@ public:
     inline float dy() const { return M[1][2]; }
     inline float sx() const { return sqrtf(M[0][0]*M[0][0]+M[0][1]*M[0][1]); }
     inline float sy() const { return sqrtf(M[1][0]*M[1][0]+M[1][1]*M[1][1]); }
-    inline float alfa() const { float s = sx(); return atan2f(M[0][1]/s, M[0][0]/s); }
+    inline float alfa() const { 
+        float s = sqrtf(M[0][0]*M[0][0]+M[0][1]*M[0][1]); 
+        return atan2f(M[0][1]/s, M[0][0]/s);
+    }
 
     inline void translate(float dx, float dy);
     inline void rotate(float angle, float ox, float oy);
@@ -525,7 +537,6 @@ void Population::EvaluationJob::run()
 float Population::distance(std::vector<Point> &base, const std::vector<Point> &query, uint8_t K, int *foo = NULL)
 {
     /*TEST*/int TESTloop = 0;
-    std::sort(base.begin(), base.end());
     
     uint8_t cnts[base.size()]; 
     memset(cnts, 0, sizeof(cnts));
@@ -563,17 +574,26 @@ float Population::distance(std::vector<Point> &base, const std::vector<Point> &q
             sum += bestdist;
         } else {
             warn("cannot match poi");
-            sum += 1e+10f;
+            sum += INF;
         }
     }
     /*TEST*/if (foo != NULL) *foo += TESTloop;
-    // debug("%d %d. sum = %.2f\n", base.size(), query.size(), sum);
+    
+    /* compute average number of queries matched to one base point */
+    int nzeroCnt=0, nzeroSum=0;
+    for (int i=0; i<(int)base.size(); i++)
+        if (cnts[i]) {
+            nzeroCnt ++;
+            nzeroSum += cnts[i];
+        }
+    float avgMatch = (float)nzeroSum/nzeroCnt;
+    sum *= std::min(1000.f, expf(avgMatch-1));
+    
     return sum;
 }
 
-float vectorSpan(const std::vector<Point> &v)
+inline float vectorSpan(const std::vector<Point> &v)
 {
-    static const float INF = 1e10;
     float minx=INF,miny=INF,maxx=-INF,maxy=-INF;
     for (int i=0; i<(int)v.size(); i++) {
         minx = std::min(minx, v[i].x);
@@ -584,17 +604,26 @@ float vectorSpan(const std::vector<Point> &v)
     return sqrtf((float)(maxx-minx+1.f)*(maxx-minx+1.f) + (float)(maxy-miny+1.f)*(maxy-miny+1.f));
 }
 
+inline float imageSpan(const Image &im, const Matrix &M)
+{
+    return (
+        M*Point(im.getWidth(), im.getHeight())
+      - M*Point(.0f, 0.f)
+    ).dist();
+}
+inline float imageSpan(const Image &im) { return imageSpan(im, Matrix()); }
+
 void Population::EvaluationJob::runOne(Agent *agent)
 {
     const Data *alien = uplink->alien, *known = uplink->known;
-    const uint8_t K = 2;
+    const uint8_t K = 100;
     
     /* for each POI from known image that is allowed by agent's RECTANGLE
      * we look for closest POI from alien image. moreover, each alien
      * POI can be used at most K times (this is to prevent matching
      * all known POIs with one or two alien POIs). */
     
-    Matrix revAgent = agent->M.reverse();
+    Matrix revAgent = agent->M.inverse();
     
     std::vector<Point> aliens, knowns, validaliens;
     for (int i=0; i<(int)alien->pois.size(); i++) 
@@ -605,23 +634,35 @@ void Population::EvaluationJob::runOne(Agent *agent)
     }
     for (int i=0; i<(int)known->pois.size(); i++) {
         Point p = known->pois[i];
-        if (agent->valid(p))
+        if (agent->valid(p)) {
             knowns.push_back(agent->M*p);
+            agent->mask[i] = true;
+        }
+        else
+            agent->mask[i] = false;
     }
+    agent->validCnt = knowns.size();
+    
+    // std::sort(knowns.begin(), knowns.end());
+    // std::sort(aliens.begin(), aliens.end());
+    
+    float takenRatio = (float)agent->validCnt/known->pois.size(),
+          dist = 0, dist2 = 0;
 
     /*TEST*/static int which=0; int oper=0;
-    float dist = 100.0f * distance(aliens, knowns, K, &oper) / knowns.size() / vectorSpan(knowns);
-    if (validaliens.size())
-        dist += 100.0f * distance(knowns, validaliens, K, &oper) / validaliens.size() / vectorSpan(validaliens);
+    dist = distance(aliens, knowns, K, &oper) 
+        / (aliens.size() + knowns.size());
+        
+    if (false && validaliens.size())
+            dist2 = distance(knowns, validaliens, K, &oper)
+            / validaliens.size() ;
     
-    /*TEST*/if ((which++)%10000 == 0) debug("%d vs %d: %.3f\n", aliens.size()*knowns.size(), oper, dist);
-
-    agent->target = -dist;
-    /* now add a penalty for too high scale ratio */
-    float sx = agent->sx(), 
-          sy = agent->sy();
-    float flatCoef = std::max(1.0f, std::max(sx/sy, sy/sx)/cfgMaxScaleRatio);
-    agent->target *= expf(flatCoef);
+    agent->target = -(dist+dist2) / pow(takenRatio, 1.);
+    if (takenRatio < cfgMinTakenPoints)
+        agent->target += INF;
+        
+    /*TEST*/if ((which++)%50 == 0) 
+        debug("%d vs %d: dist=%.3f+%.3f, valid=%d\n", aliens.size()*agent->validCnt, oper, dist, dist2, agent->validCnt);
 }
 void Population::evaluate()
 {
@@ -680,9 +721,26 @@ void Population::makeRandom(Agent *a)
 {
     a->mask.set(); /* not too random for now */
     
+    int W = known->raw.getWidth(), 
+        H = known->raw.getHeight();
+    
+#if TRYCHOICE == 1
+    float dx = Random::positive(W/3)+2.0f*W/3, x1 = Random::positive(W-dx),
+          dy = Random::positive(H/3)+2.0f*H/3, y1 = Random::positive(H-dy);
+          
+    a->mx = x1;
+    a->Mx = x1+dx;
+    a->my = y1;
+    a->My = y1+dy;
+    
+    assert(a->valid(Point(a->mx,a->my)));
+    assert(a->valid(Point(a->Mx,a->My)));
+    assert(a->valid(Point(a->Mx - a->my, a->My - a->my)));
+#else
     a->mx = a->my = 0;
-    a->Mx = known->raw.getWidth();
-    a->My = known->raw.getHeight();
+    a->Mx = W;
+    a->My = H;
+#endif
 
     a->M = Matrix();
     a->translate(
@@ -727,14 +785,28 @@ void Population::mutation(Agent *a)
         a->scale(-1, 1, rx, ry);
         a->rotate(-rangle, rx, ry);
     }
+#if TRYCHOICE == 1
+    if (Random::maybe(cfgChoiceProp)) a->mx += Random::gaussian(0, cfgChoiceDev);
+    if (Random::maybe(cfgChoiceProp)) a->Mx += Random::gaussian(0, cfgChoiceDev);
+    if (Random::maybe(cfgChoiceProp)) a->my += Random::gaussian(0, cfgChoiceDev);
+    if (Random::maybe(cfgChoiceProp)) a->My += Random::gaussian(0, cfgChoiceDev);
+#endif
 }
 
 /* --- differential evolution mating */
 void Population::deMating(Agent *a, const Agent *p, const Agent *q, const Agent *r)
 {
-    float factor = fabs(Random::gaussian(cfgDEMatingCoeff, cfgDEMatingDev));
+    float mfactor = fabs(Random::gaussian(cfgDEMatingCoeff, cfgDEMatingDev));
     if(q->fitness < r->fitness) std::swap(q,r);
-    a->M = p->M + (q->M - r->M) * factor;
+    a->M = p->M + (q->M - r->M) * mfactor;
+    /* now rectangle demating */
+#if TRYCHOICE == 1
+    float cfactor = fabs(Random::gaussian(cfgDEMatingCoeff, cfgDEMatingDev));
+    a->mx = p->mx + (q->mx - r->mx) * cfactor;
+    a->Mx = p->Mx + (q->Mx - r->Mx) * cfactor;
+    a->my = p->my + (q->my - r->my) * cfactor;
+    a->My = p->My + (q->My - r->My) * cfactor;
+#endif
 }
 
 /* this tells us when to stop */
@@ -788,10 +860,14 @@ Agent Population::evolve()
 
         float survivalRate = getSurvivalRate();
 
-        gui_status("gen: %d, survival: %d%%, best fit: target %.2f fitness %f  |  d=(%.0f,%.0f), s=(%.2f,%.2f), a=%.3f",
+        gui_status("gen: %d, survival: %d%%, best fit: target %.2f fitness %f  |  "
+                   "d=(%.0f,%.0f), s=(%.2f,%.2f), a=%.3f  |   "
+                   "valid=%d,  mx=%d, Mx=%d, my=%d, My=%d",
                    generationNumber, (int)(survivalRate*100.f),
                    pop[0].target, pop[0].fitness,
-                   pop[0].dx(),pop[0].dy(),pop[0].sx(),pop[0].sy(),pop[0].alfa()/M_PI*180.0);
+                   pop[0].dx(),pop[0].dy(),pop[0].sx(),pop[0].sy(),pop[0].alfa()/M_PI*180.0,
+                   pop[0].validCnt,
+                   pop[0].mx, pop[0].Mx, pop[0].my, pop[0].My);
 
         bestDS.lock();
         bestDS.ms.clear();
