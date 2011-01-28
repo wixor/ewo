@@ -275,6 +275,7 @@ void gui_status(const char *fmt, ...)
 static cairo_user_data_key_t gui_free_pixmap_key;
 static void gui_free_pixmap(void *data)
 {
+    return ;
     gdk_threads_enter();
     Display *display = gdk_x11_get_default_xdisplay();
     XFreePixmap(display, cairo_xlib_surface_get_drawable((cairo_surface_t *)data));
@@ -285,6 +286,7 @@ cairo_surface_t *img_makesurface(int width, int height, const uint8_t *bytes); /
 cairo_surface_t *gui_do_upload(int width, int height, const void *bytes)
 {
     cairo_surface_t *source = img_makesurface(width, height, bytes);
+    return source;
     if(!source) return NULL;
 
     gdk_threads_enter();

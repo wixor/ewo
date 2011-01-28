@@ -232,7 +232,7 @@ std::vector<POI> findPOIs(const std::vector<POI> &all, int W, int H, float thres
     Image tabu(W, H);
     tabu.fill(0);
     std::vector<POI> pois;
-
+    
     for(int i=0; i<(int)all.size() && (int)pois.size() < count; i++)
     {
         const POI &curr = all[i];
@@ -241,8 +241,9 @@ std::vector<POI> findPOIs(const std::vector<POI> &all, int W, int H, float thres
         if(curr.val < threshold) break;
         
         pois.push_back(curr);
+        // float R = tabuSizeParam*(W+H)/curr.val;
+        float R = tabuSizeParam*500/curr.val;
         
-        float R = tabuSizeParam*(W+H)/curr.val;
         int iR = R;
 
         for (int y=-iR; y<=iR; y++)

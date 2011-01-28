@@ -1,4 +1,5 @@
 #include <cstdlib>
+#include <deque> /**/
 #include <cstdio>
 #include <cmath>
 #include <cassert>
@@ -34,7 +35,7 @@ static void parsePOIScales(const char *value);
 static void parseSurvivalEq(const char *value);
 
 /* this is the size of bitset in Agent */
-#define MAX_POIS 256
+#define MAX_POIS 1024
 typedef std::bitset<MAX_POIS> mask_t;
 
 static int cfgThreads;
@@ -210,6 +211,9 @@ void Data::doBuild(const char *filename)
         writeCache(filename);
     }
     std::sort(pois.begin(), pois.end(), compX);
+    
+    debug("build completed. number of pois: %d\n", pois.size());
+    
     caimg = gui_upload(raw);
 }
 
@@ -353,7 +357,7 @@ class FitDisplaySlot : public DisplaySlot
 public:
     const Data *known, *alien;
     rgba knownActiveColor, knownInactiveColor, alienColor, silhouetteColor;
-    mask_t knownMask;
+    mask_t knownMask, validalienMask;
     std::vector<Matrix> ms;
 
     inline FitDisplaySlot(const char *name) : DisplaySlot(name) 
@@ -383,7 +387,19 @@ public:
         
         std::vector<Point> ps(alien->pois.begin(), alien->pois.end());
         drawDots(ps,6, alienColor);
+        
+        /*std::vector<Point> ps;
+        for (int i=0; i<(int)alien->pois.size(); i++)
+            if (validalienMask[i])
+                ps.push_back(alien->pois[i]);
+        drawDots(ps,6, alienColor);
 
+        ps.clear();
+        for (int i=0; i<(int)alien->pois.size(); i++)
+            if (!validalienMask[i])
+                ps.push_back(alien->pois[i]);
+        drawDots(ps,6, knownInactiveColor);*/
+        
         ps.clear();
         for(int i=0; i<(int)known->pois.size(); i++)
             if(knownMask[i])
@@ -418,10 +434,12 @@ public:
     
     int mx, Mx, my, My; /* upper and lower bounds for points that are taken into consideration */
     mask_t mask; /* it might be useful */
+    mask_t antymask;
     
     float target; /* target function */
     float fitness; /* population-wide fitness factor */
 
+    inline Agent() { mx = my = -1; Mx = My = 10000; }
     /* agents ordering */
     inline bool operator<(const Agent &A) const {
         return fitness > A.fitness;
@@ -517,7 +535,7 @@ class Population
     float getSurvivalRate() const;
 
 public:
-    static float distance(std::vector<Point> &base, const std::vector<Point> &query, uint8_t K, int* foo);
+    static float distance(const std::vector<Point> &base, const std::vector<Point> &query, uint8_t K, int* foo);
     Population(const Data *known, const Data *alien);
     Agent evolve();
 };
@@ -533,8 +551,10 @@ void Population::EvaluationJob::run()
         runOne(&uplink->pop[i]);
 }
 
+static inline float sq(float f) { return f*f; }
+
 /* base -- aliens, query -- known */
-float Population::distance(std::vector<Point> &base, const std::vector<Point> &query, uint8_t K, int *foo = NULL)
+float Population::distance(const std::vector<Point> &base, const std::vector<Point> &query, uint8_t K, int *foo = NULL)
 {
     /*TEST*/int TESTloop = 0;
     
@@ -571,7 +591,7 @@ float Population::distance(std::vector<Point> &base, const std::vector<Point> &q
 
         if(bestidx != -1) {
             cnts[bestidx]++;
-            sum += bestdist;
+            sum += sq(bestdist);
         } else {
             warn("cannot match poi");
             sum += INF;
@@ -588,10 +608,22 @@ float Population::distance(std::vector<Point> &base, const std::vector<Point> &q
         }
     float avgMatch = (float)nzeroSum/nzeroCnt;
     sum *= std::min(1000.f, expf(avgMatch-1));
+    // sum *= powf(nzeroCnt, 2.0f);
     
     return sum;
 }
 
+inline void vectorSpan(const std::vector<Point> &v, Agent *a)
+{
+    float minx=INF,miny=INF,maxx=-INF,maxy=-INF;
+    for (int i=0; i<(int)v.size(); i++) {
+        minx = std::min(minx, v[i].x);
+        maxx = std::max(maxx, v[i].x);
+        miny = std::min(miny, v[i].y);
+        maxy = std::max(maxy, v[i].y);
+    }
+    a->mx=minx; a->my=miny; a->Mx=maxx; a->My=maxy;
+}
 inline float vectorSpan(const std::vector<Point> &v)
 {
     float minx=INF,miny=INF,maxx=-INF,maxy=-INF;
@@ -616,54 +648,67 @@ inline float imageSpan(const Image &im) { return imageSpan(im, Matrix()); }
 void Population::EvaluationJob::runOne(Agent *agent)
 {
     const Data *alien = uplink->alien, *known = uplink->known;
-    const uint8_t K = 100;
+    static const uint8_t K = 200;
     
     /* for each POI from known image that is allowed by agent's RECTANGLE
      * we look for closest POI from alien image. moreover, each alien
      * POI can be used at most K times (this is to prevent matching
      * all known POIs with one or two alien POIs). */
     
-    Matrix revAgent = agent->M.inverse();
+    Matrix revAgent = agent->M.reverse();
+    
+    assert(known->pois.size());
     
     std::vector<Point> aliens, knowns, validaliens;
-    for (int i=0; i<(int)alien->pois.size(); i++) 
-    {
-        if (agent->valid(revAgent*alien->pois[i]))
-            validaliens.push_back(alien->pois[i]);
-        aliens.push_back(alien->pois[i]);
-    }
     for (int i=0; i<(int)known->pois.size(); i++) {
         Point p = known->pois[i];
-        if (agent->valid(p)) {
-            knowns.push_back(agent->M*p);
+        // debug("point: %.3f %.3f. %d %d %d %d\n", p.x, p.y, agent->mx, agent->my, agent->Mx, agent->My);
+#if TRYCHOICE == 1
+        if (agent->valid(p))
+#endif
+        {    
+            knowns.push_back(agent->M*p); 
             agent->mask[i] = true;
         }
+#if TRYCHOICE == 1
         else
             agent->mask[i] = false;
+#endif
     }
-    agent->validCnt = knowns.size();
+    agent->antymask.reset();
+    vectorSpan(knowns, agent);
+    assert(agent->antymask.count() == 0);
+    for (int i=0; i<(int)alien->pois.size(); i++) 
+    {
+        Point p = alien->pois[i];
+        if (agent->valid(revAgent*p)) {
+            Point q = revAgent*p, p2 = agent->M*q;
+            // debug("%.2f %.2f --> %.2f %.2f (--> %.2f %.2f)\n", p.x, p.y, q.x, q.y, p2.x, p2.y);
+            validaliens.push_back(p);
+            agent->antymask.set(i);
+        }
+        aliens.push_back(p);
+    }
     
+    agent->validCnt = knowns.size();
     // std::sort(knowns.begin(), knowns.end());
-    // std::sort(aliens.begin(), aliens.end());
     
     float takenRatio = (float)agent->validCnt/known->pois.size(),
           dist = 0, dist2 = 0;
 
     /*TEST*/static int which=0; int oper=0;
-    dist = distance(aliens, knowns, K, &oper) 
-        / (aliens.size() + knowns.size());
+    which ++;
+    dist = distance(aliens, knowns, K, &oper) / knowns.size(); /// vectorSpan(knowns);
         
-    if (false && validaliens.size())
-            dist2 = distance(knowns, validaliens, K, &oper)
-            / validaliens.size() ;
+    // if (validaliens.size()) dist2 = distance(knowns, validaliens, K, &oper) / validaliens.size() / vectorSpan(aliens);
     
-    agent->target = -(dist+dist2) / pow(takenRatio, 1.);
-    if (takenRatio < cfgMinTakenPoints)
-        agent->target += INF;
-        
-    /*TEST*/if ((which++)%5000 == 0) 
-        debug("%d vs %d: dist=%.3f+%.3f, valid=%d\n", aliens.size()*agent->validCnt, oper, dist, dist2, agent->validCnt);
+    agent->target = -(dist+dist2); /// pow(takenRatio, 1.);
+    
+    /*TEST*/if (which%20000 == 0) 
+        debug("%d vs %d: dist=%.3f+%.3f, valid known=%d, valid alien=%d=%d\n", 
+              aliens.size()*agent->validCnt, oper, dist, dist2, agent->validCnt, validaliens.size(), agent->antymask.count());
 }
+
 void Population::evaluate()
 {
     const int evalBatch = 50;
@@ -744,8 +789,8 @@ void Population::makeRandom(Agent *a)
 
     a->M = Matrix();
     a->translate(
-            Random::real(cfgTranslateInit) * known->raw.getWidth(),
-            Random::real(cfgTranslateInit) * known->raw.getHeight());
+            Random::real(cfgTranslateInit) * alien->raw.getWidth(),
+            Random::real(cfgTranslateInit) * alien->raw.getHeight());
     a->rotate(Random::real(cfgRotateInit),
             known->originX, known->originY);
     a->scale(
@@ -876,6 +921,7 @@ Agent Population::evolve()
         for(int i=0; i<(int)pop.size(); i+=std::max(1, (int)pop.size()/30))
             bestDS.ms.push_back(pop[i].M);
         bestDS.knownMask = pop[0].mask;
+        bestDS.validalienMask = pop[0].antymask;
         bestDS.unlock();
 
         bestScores.push_back(pop[0].target);
@@ -908,6 +954,9 @@ Agent Population::evolve()
         
         if(terminationCondition()) break;
     }
+    
+    usleep(2000000);
+    
     
     knownDS.lock(); knownDS.data = NULL; knownDS.unlock();
     alienDS.lock(); alienDS.data = NULL; alienDS.unlock();
