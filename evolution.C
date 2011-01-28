@@ -24,7 +24,7 @@ static void parsePOIScales(const char *value);
 static void parseSurvivalEq(const char *value);
 
 /* this is the size of bitset in Agent */
-#define MAX_POIS 128
+#define MAX_POIS 1024
 typedef std::bitset<MAX_POIS> mask_t;
 
 static int cfgThreads;
@@ -397,10 +397,10 @@ public:
     inline FitDisplaySlot(const char *name) : DisplaySlot(name) 
     {
         known = alien = NULL;
-        knownActiveColor = rgba(0.1,1,0.1,0.5);
-        knownInactiveColor = rgba(0.0,.5,0.0,0.3);
-        alienColor = rgba(1,0.3,0.1,0.5);
-        silhouetteColor = rgba(.2,.5,1,.3);
+        knownActiveColor   = rgba(.1, 1, .1,.5);
+        knownInactiveColor = rgba(.7,.7, 7, .7);
+        alienColor         = rgba(1, .3, .1,.5);
+        silhouetteColor    = rgba(.2,.5, 1, .3);
     }
 
     virtual ~FitDisplaySlot() { }
@@ -628,7 +628,7 @@ void Population::EvaluationJob::runOne(Agent *agent)
 }
 void Population::evaluate()
 {
-    const int evalBatch = 50;
+    const int evalBatch = 100;
     int nJobs = (pop.size() + evalBatch - 1) / evalBatch;
     EvaluationJob jobs[nJobs];
     Completion c;
@@ -688,8 +688,8 @@ void Population::makeRandom(Agent *a)
     a->mask.set(); /* not too random for now */
     a->M = Matrix();
     a->translate(
-            Random::real(cfgTranslateInit) * known->raw.getWidth(),
-            Random::real(cfgTranslateInit) * known->raw.getHeight());
+            Random::real(cfgTranslateInit) * alien->raw.getWidth(),
+            Random::real(cfgTranslateInit) * alien->raw.getHeight());
     a->rotate(Random::real(cfgRotateInit),
             known->originX, known->originY);
     a->scale(1.f+Random::real(cfgScaleInit),1.f+Random::real(cfgScaleInit),
@@ -775,6 +775,9 @@ Agent Population::evolve()
     
     Agent bestEver;
     bestEver.target = -1000000.0f;
+    
+    const inst logPerGen = 10;
+    std::vector<std::vector<float> > logVector;
 
     Timer totalEvolutionTime(CLOCK_PROCESS_CPUTIME_ID);
     totalEvolutionTime.start();
@@ -800,6 +803,11 @@ Agent Population::evolve()
         bestScores.push_back(pop[0].target);
         if (bestEver.target < pop[0].target)
             bestEver = pop[0];
+        
+        logVector.push_back(std::vector<float>(logPerGen));
+        logVector.back()[0] = pop[0].target;
+        for (int i=1; i<logPerGen; i++)
+            logVector.back()[i] = pop[rand()%pop.size()/2].target;
         
         int survivors = survivalRate * pop.size();
         for(int i=survivors; i<(int)pop.size(); i++)
@@ -830,8 +838,13 @@ Agent Population::evolve()
         char filename[32];
         sprintf(filename, "evo-%d.log", cnt++);
         FILE *log = fopen(filename, "w");
-        for(int i=0; i<(int)bestScores.size(); i++)
-            fprintf(log,"%.8f\n",bestScores[i]);
+
+        /* wykresy w gnuplocie mozna robic z pewnego przedzialu danych:
+         * gnuplot> set xrange [10:80] */
+        for (int i=0; i<(int)logVector.size(); i++)
+            for (int j=0; j<logPerGen; j++)
+                fprintf(log, "%d %.8f\n", i, logVector[i][j]);
+
         fclose(log);
         info("log written to '%s'", filename);
     }
