@@ -1,6 +1,7 @@
 #include <stdlib.h>
 #include <stdint.h>
 #include <string.h>
+#include <assert.h>
 
 #include <cairo.h>
 #include <gdk-pixbuf/gdk-pixbuf.h>
@@ -169,18 +170,37 @@ uint32_t img_checksum(int width, int height, const uint8_t *bytes)
     return sum2 << 16 | sum1;
 }
 
-static cairo_user_data_key_t img_free_cairo_buffer_key;
-cairo_surface_t *img_makesurface(int width, int height, const uint8_t *bytes)
+static void *memdup(const void *buf, size_t size)
 {
-    int stride = cairo_format_stride_for_width(CAIRO_FORMAT_RGB24, width);
+    void *ret = malloc(size);
+    if(ret == NULL) return NULL;
+    memcpy(ret, buf, size);
+    return ret;
+}
 
-    unsigned char *data = img_expand32(width, height, stride, bytes);
+static cairo_user_data_key_t img_free_cairo_buffer_key;
+
+cairo_surface_t *img_make_surface(int width, int height, const void *bytes, int gray)
+{
+    void *data;
+    int stride;
+    cairo_format_t format;
+
+    if(gray) {
+        format = CAIRO_FORMAT_RGB24;
+        stride = cairo_format_stride_for_width(format, width);
+        data = img_expand32(width, height, stride, bytes);
+    } else {
+        format = CAIRO_FORMAT_ARGB32;
+        stride = cairo_format_stride_for_width(format, width);
+        assert(stride == sizeof(uint32_t)*width);
+        data = memdup(bytes, width*height*sizeof(uint32_t));
+    }
+
     if(data == NULL)
         return NULL;
 
-    cairo_surface_t *surface = 
-        cairo_image_surface_create_for_data(data, CAIRO_FORMAT_RGB24, width, height, stride);
-
+    cairo_surface_t *surface = cairo_image_surface_create_for_data(data, format, width, height, stride);
     if(cairo_surface_status(surface) == CAIRO_STATUS_NO_MEMORY) {
         free(data);
         return NULL;

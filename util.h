@@ -8,6 +8,12 @@
 #include <stdexcept>
 #include <pthread.h>
 
+#define info(fmt, ...)  printf("   " fmt "\n", ## __VA_ARGS__)
+#define okay(fmt, ...)  printf(" + " fmt "\n", ## __VA_ARGS__)
+#define warn(fmt, ...)  printf("-- " fmt "\n", ## __VA_ARGS__)
+#define fail(fmt, ...)  printf("!! " fmt "\n", ## __VA_ARGS__)
+#define debug(fmt, ...) printf(".. " fmt "\n", ## __VA_ARGS__)
+
 /* -------------------------------------------------------------------------- */
 
 template <typename T> class Array2D
@@ -31,7 +37,7 @@ public:
             return;
         width = w; height = h;
         data = (T *)realloc(data, width*height*sizeof(T));
-        if(!data) throw std::bad_alloc();
+        if(width && height && !data) throw std::bad_alloc();
     }
 
     inline Array2D<T>& operator=(const Array2D<T>& im)
@@ -44,6 +50,11 @@ public:
     inline int getWidth() const { return width; }
     inline int getHeight() const { return height; }
     inline bool inside(int x, int y) const { return x>=0 && y>=0 && x<width && y<height; }
+
+    inline void fill(const T &v) {
+        for(int i=0; i<width*height; i++)
+            data[i] = v;
+    }
 };
 
 /* -------------------------------------------------------------------------- */
@@ -108,21 +119,7 @@ public:
         ret[0][0] = sx; ret[1][1] = sy;
         return ret;
     }
-    
-    inline Matrix reverse()
-    {
-        float a=data[0],b=data[1],c=data[2],d=data[3],e=data[4],f=data[5];
-        float det = a*e-b*d;
-        Matrix ret;
-        ret[0][0] = e/det;
-        ret[0][1] = - b/det;
-        ret[0][2] = (b*f-c*e)/det;
-        
-        ret[1][0] = - d/det;
-        ret[1][1] = a/det;
-        ret[1][2] = - (a*f-c*d)/det;
-        return ret;
-    }
+
     inline Matrix operator+(const Matrix &M) const
     {
         const Matrix &me = *this;

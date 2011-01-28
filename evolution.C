@@ -1,5 +1,4 @@
 #include <cstdlib>
-#include <deque> /**/
 #include <cstdio>
 #include <cmath>
 #include <cassert>
@@ -19,23 +18,13 @@
 #include "image.h"
 #include "config.h"
 
-#define info(fmt, ...)  printf("   " fmt "\n", ## __VA_ARGS__)
-#define okay(fmt, ...)  printf(" + " fmt "\n", ## __VA_ARGS__)
-#define warn(fmt, ...)  printf("-- " fmt "\n", ## __VA_ARGS__)
-#define fail(fmt, ...)  printf("!! " fmt "\n", ## __VA_ARGS__)
-#define debug(fmt, ...) printf(".. " fmt "\n", ## __VA_ARGS__)
-
-#define TRYCHOICE 0
-
-#define INF 1e8f
-
 /* ------------------------------------------------------------------------ */
 
 static void parsePOIScales(const char *value);
 static void parseSurvivalEq(const char *value);
 
 /* this is the size of bitset in Agent */
-#define MAX_POIS 1024
+#define MAX_POIS 128
 typedef std::bitset<MAX_POIS> mask_t;
 
 static int cfgThreads;
@@ -44,6 +33,7 @@ static std::vector<float> cfgPOIScales;
 static float cfgPOIThreshold;
 static float cfgPOITabuParam;
 static int cfgPOICount;
+static int cfgProxMapDetail, cfgProxMapEntries;
 static int cfgPopulationSize;
 static std::vector<float> cfgSurvivalEq;
 static int cfgStopCondParam, cfgMaxGenerations;
@@ -54,11 +44,6 @@ static float cfgTranslateDev2,  cfgRotateDev2,  cfgScaleDev2;
 static float cfgTranslateMean2, cfgRotateMean2, cfgScaleMean2;
 static float cfgOriginDev;
 static float cfgDEMatingProp, cfgDEMatingCoeff, cfgDEMatingDev;
-static float cfgMaxScaleRatio;
-static float cfgMinTakenPoints = 0.15;
-static float cfgChoiceProp = 0.2;
-static float cfgChoiceDev = 3;
-
 
 static struct config_var cfgvars[] = {
     { "threads",        config_var::INT,       &cfgThreads },
@@ -68,13 +53,13 @@ static struct config_var cfgvars[] = {
     { "poiCount",       config_var::INT,       &cfgPOICount },
     { "poiThreshold",   config_var::FLOAT,     &cfgPOIThreshold },
     { "poiTabuParam",   config_var::FLOAT,     &cfgPOITabuParam },
+    { "proxMapDetail",  config_var::INT,       &cfgProxMapDetail },
+    { "proxMapEntries", config_var::INT,       &cfgProxMapEntries },
     /* evolution */
     { "populationSize", config_var::INT,       &cfgPopulationSize },
     { "survivalEq",     config_var::CALLBACK,  (void *)&parseSurvivalEq },
     { "stopCondParam",  config_var::INT,       &cfgStopCondParam },
     { "maxGenerations", config_var::INT,       &cfgMaxGenerations },
-    /* target function */
-    { "maxScaleRatio",  config_var::FLOAT,     &cfgMaxScaleRatio },
     /* initial population generation parameters */
     { "translateInit",  config_var::FLOAT,     &cfgTranslateInit },
     { "rotateInit",     config_var::FLOAT,     &cfgRotateInit },
@@ -139,9 +124,6 @@ public:
     static inline bool coin() {
         return rand()&1;
     }
-    static inline float randomSign() {
-        return coin() ? -1.0 : 1.0;
-    }
     static inline bool maybe(float prop) {
         return rand() <= prop*RAND_MAX;
     }
@@ -168,6 +150,7 @@ class Data
 {
     inline void findOrigin();
     inline void findPOIs();
+    inline void buildProxMap();
 
     static inline char *makeCacheFilename(const char *filename);
     inline uint32_t checksum() const;
@@ -175,7 +158,7 @@ class Data
     inline void writeCache(const char *filename) const;
 
     struct cacheHdr {
-        enum { MAGIC = 0xfc83dea1 };
+        enum { MAGIC = 0xc9981adf };
         uint32_t magic;
         uint32_t checksum;
         uint32_t poiCount;
@@ -187,9 +170,11 @@ class Data
 
 public:
     Image raw;
-    std::vector<POI> pois;
+    POIvec pois;
+    ProximityMap prox;
     int originX, originY; /* median of POIs */
     CairoImage caimg; /* image for gui */
+    CairoImage proxci; /* visualization of proximity data */
 
     static inline Data build(const char *filename) {
         Data ret;
@@ -207,20 +192,37 @@ void Data::doBuild(const char *filename)
     } catch(std::exception &e) {
         warn("failed to read cache: %s", e.what());
         findPOIs();
-        findOrigin(); 
+        buildProxMap();
+        findOrigin();
         writeCache(filename);
     }
-    std::sort(pois.begin(), pois.end(), compX);
-    
-    debug("build completed. number of pois: %d\n", pois.size());
-    
+
     caimg = gui_upload(raw);
+    proxci = gui_upload(prox.visualize());
 }
 
 void Data::findPOIs()
 {
-    Array2D<float> eval = ::evaluateImage(raw, cfgPOISteps, cfgPOIScales);
-    pois = ::findPOIs(eval, cfgPOIThreshold, cfgPOICount, cfgPOITabuParam);
+    info("looking for POIs");
+    POIFinder pf;
+    pf.src = &raw;
+    pf.scales = cfgPOIScales;
+    pf.steps = cfgPOISteps;
+    pf.count = cfgPOICount;
+    pf.threshold = cfgPOIThreshold;
+    pf.tabuScale = 0;
+    pf.run();
+
+    pois = POIvec();
+    std::swap(pois, pf.selected);
+}
+
+void Data::buildProxMap()
+{
+    info("building proximity map");
+    prox.resize(raw.getWidth(), raw.getHeight(),
+                cfgProxMapDetail, cfgProxMapEntries);
+    prox.build(pois);
 }
 
 void Data::findOrigin()
@@ -247,8 +249,10 @@ static inline uint32_t float2u32(float v) {
 uint32_t Data::checksum() const
 {
     uint32_t ret = raw.checksum();
-    ret ^= cfgPOISteps ^ cfgPOICount;
+    ret ^= cfgPOISteps ^ cfgPOICount ^
+           cfgProxMapDetail ^ cfgProxMapEntries;
     ret ^= float2u32(cfgPOIThreshold);
+    ret ^= float2u32(cfgPOITabuParam);
     for(int i=0; i<(int)cfgPOIScales.size(); i++)
         ret ^= float2u32(cfgPOIScales[i]);
     return ret;
@@ -294,6 +298,17 @@ void Data::readCached(const char *filename)
         throw std::runtime_error("failed to read POIs");
     }
 
+    int proxsize = raw.getWidth() * cfgProxMapDetail *
+                   raw.getHeight() * cfgProxMapDetail * 
+                   cfgProxMapEntries * sizeof(ProximityMap::poiid_t);
+    prox.resize(raw.getWidth(), raw.getHeight(),
+                cfgProxMapDetail, cfgProxMapEntries);
+    if(fread(prox.at(0,0), proxsize,1, f) != 1) {
+        pois.clear();
+        prox.resize(0,0,0,0);
+        throw std::runtime_error("failed to read proximity map");
+    }
+
     originX = hdr.originX;
     originY = hdr.originY;
 
@@ -307,7 +322,7 @@ void Data::writeCache(const char *filename) const
     free(cacheFilename);
 
     if(!f) 
-        throw std::runtime_error("failed to write cache file");
+        throw std::runtime_error("failed to open cache file");
 
     cacheHdr hdr;
     hdr.magic = cacheHdr::MAGIC;
@@ -316,12 +331,16 @@ void Data::writeCache(const char *filename) const
     hdr.originX = originX;
     hdr.originY = originY;
 
+    int proxsize = prox.getWidth() * prox.getDetail() *
+                   prox.getHeight() * prox.getDetail() * 
+                   prox.getEntries() * sizeof(ProximityMap::poiid_t);
     if(fwrite(&hdr, sizeof(hdr),1, f) != 1 ||
-       fwrite(&pois[0], sizeof(POI),pois.size(), f) != pois.size()) {
+       fwrite(&pois[0], sizeof(POI),pois.size(), f) != pois.size() ||
+       fwrite(prox.at(0,0), proxsize,1, f) != 1) {
         fclose(f);
         throw std::runtime_error("failed to write cache file");
     }
-
+    
     fclose(f);
 }
 
@@ -330,25 +349,40 @@ void Data::writeCache(const char *filename) const
 class ImageDisplaySlot : public DisplaySlot
 {
 public:
-    const Data *data;
+    CairoImage ci;
+    std::vector<Point> ps;
     rgba color;
+    float dotsize;
+    bool empty;
 
-    inline ImageDisplaySlot(const char *name, rgba color)
-        : DisplaySlot(name), color(color) { }
+    inline ImageDisplaySlot(const char *name, rgba color, float dotsize = 6)
+        : DisplaySlot(name), color(color), dotsize(dotsize), empty(true) { }
     virtual ~ImageDisplaySlot() { }
 
     virtual void draw()
     {
-        if(!data)
-            return;
+        if(empty)
+            resize(0,0);
+        else {
+            resize(ci.getWidth(), ci.getHeight());
+            drawImage(ci);
+            drawDots(ps, dotsize, color);
+        }
+    }
 
-        resize(data->raw.getWidth(), data->raw.getHeight());
-        drawImage(data->caimg);
-
-        std::vector<Point> ps(data->pois.size());
-        for(int i=0; i<(int)data->pois.size(); i++)
-            ps[i] = data->pois[i];
-        drawDots(ps,6, color);
+    void setFromData(const Data *data, bool takeProximity)
+    {
+        lock();
+        if(data) {
+            ci = takeProximity ? data->proxci : data->caimg;
+            ps.clear();
+            for(int i=0; i<(int)data->pois.size(); i++)
+                ps.push_back(data->pois[i]);
+            empty = false;
+        } else {
+            empty = true;
+        }
+        unlock();
     }
 };
 
@@ -357,14 +391,14 @@ class FitDisplaySlot : public DisplaySlot
 public:
     const Data *known, *alien;
     rgba knownActiveColor, knownInactiveColor, alienColor, silhouetteColor;
-    mask_t knownMask, validalienMask;
+    mask_t knownMask;
     std::vector<Matrix> ms;
 
     inline FitDisplaySlot(const char *name) : DisplaySlot(name) 
     {
         known = alien = NULL;
-        knownActiveColor = rgba(0.1, 1, 0.1, 0.5);
-        knownInactiveColor = rgba(.7, .7, .7, 0.7);
+        knownActiveColor = rgba(0.1,1,0.1,0.5);
+        knownInactiveColor = rgba(0.0,.5,0.0,0.3);
         alienColor = rgba(1,0.3,0.1,0.5);
         silhouetteColor = rgba(.2,.5,1,.3);
     }
@@ -387,19 +421,7 @@ public:
         
         std::vector<Point> ps(alien->pois.begin(), alien->pois.end());
         drawDots(ps,6, alienColor);
-        
-        /*std::vector<Point> ps;
-        for (int i=0; i<(int)alien->pois.size(); i++)
-            if (validalienMask[i])
-                ps.push_back(alien->pois[i]);
-        drawDots(ps,6, alienColor);
 
-        ps.clear();
-        for (int i=0; i<(int)alien->pois.size(); i++)
-            if (!validalienMask[i])
-                ps.push_back(alien->pois[i]);
-        drawDots(ps,6, knownInactiveColor);*/
-        
         ps.clear();
         for(int i=0; i<(int)known->pois.size(); i++)
             if(knownMask[i])
@@ -420,7 +442,8 @@ public:
  * themselves upon first action, which must occur after gtk_gui_init. */
 
 static ImageDisplaySlot knownDS("known image", rgba(0.1,1,0.1,0.5)),
-                        alienDS("alien image", rgba(1,0.3,0.1,0.5));
+                        alienDS("alien image", rgba(1,0.3,0.1,0.5)),
+                        alproDS("alien proximity map", rgba(1,1,1,1), 3);
 static FitDisplaySlot   bestDS("best fit");
 
 /* ------------------------------------------------------------------------ */
@@ -429,17 +452,10 @@ class Agent
 {
 public:
     Matrix M; /* the transformation matrix */
-    
-    int validCnt;
-    
-    int mx, Mx, my, My; /* upper and lower bounds for points that are taken into consideration */
-    mask_t mask; /* it might be useful */
-    mask_t antymask;
-    
+    mask_t mask; /* which POIs to take into consideration */
     float target; /* target function */
     float fitness; /* population-wide fitness factor */
 
-    inline Agent() { mx = my = -1; Mx = My = 10000; }
     /* agents ordering */
     inline bool operator<(const Agent &A) const {
         return fitness > A.fitness;
@@ -450,16 +466,11 @@ public:
     inline float dy() const { return M[1][2]; }
     inline float sx() const { return sqrtf(M[0][0]*M[0][0]+M[0][1]*M[0][1]); }
     inline float sy() const { return sqrtf(M[1][0]*M[1][0]+M[1][1]*M[1][1]); }
-    inline float alfa() const { 
-        float s = sqrtf(M[0][0]*M[0][0]+M[0][1]*M[0][1]); 
-        return atan2f(M[0][1]/s, M[0][0]/s);
-    }
+    inline float alfa() const { float s = sx(); return atan2f(M[0][1]/s, M[0][0]/s); }
 
     inline void translate(float dx, float dy);
     inline void rotate(float angle, float ox, float oy);
-    inline void scale(float sx, float sy, float ox, float oy);   
-    
-    inline bool valid(const Point& p) const { return (p.x >= mx && p.y >= my && p.x <= Mx && p.y <= My); }
+    inline void scale(float sx, float sy, float ox, float oy);    
 };
 
 /* the three basic mutations.
@@ -519,6 +530,7 @@ class Population
 
     };
     inline void evaluate();
+    int fullsearches;
 
     /* roulette selection */
     int roulette(int n);
@@ -535,7 +547,6 @@ class Population
     float getSurvivalRate() const;
 
 public:
-    static float distance(const std::vector<Point> &base, const std::vector<Point> &query, uint8_t K, int* foo);
     Population(const Data *known, const Data *alien);
     Agent evolve();
 };
@@ -550,165 +561,71 @@ void Population::EvaluationJob::run()
     for(int i=start; i<end; i++)
         runOne(&uplink->pop[i]);
 }
-
-static inline float sq(float f) { return f*f; }
-
-/* base -- aliens, query -- known */
-float Population::distance(const std::vector<Point> &base, const std::vector<Point> &query, uint8_t K, int *foo = NULL)
-{
-    /*TEST*/int TESTloop = 0;
-    
-    uint8_t cnts[base.size()]; 
-    memset(cnts, 0, sizeof(cnts));
-    
-    float sum = 0;
-    for(int i=0; i<(int)query.size(); i++)
-    {
-        Point p = query[i];
-        
-        int bestidx = -1; float bestdist = 1e+10f;
-        int ind0 = upper_bound(base.begin(), base.end(), p) - base.begin();
-        /* najpierw idziemy po rosnących x */
-        for (int j = ind0; j<(int)base.size() && abs(base[j].x-p.x) <= bestdist; j++) 
-        {
-            /*TEST*/TESTloop ++;
-            if (cnts[j] >= K) continue;
-            float dist = (p - base[j]).dist();
-            if(dist >= bestdist) continue;
-            bestidx = j;
-            bestdist = dist;
-        }
-        /* potem po malejących x */
-        for (int j = ind0-1; j>=0 && abs(p.x-base[j].x) <= bestdist; j--) 
-        {
-            /*TEST*/TESTloop ++;
-            if (cnts[j] >= K) continue;
-            float dist = (p - base[j]).dist();
-            if(dist >= bestdist) continue;
-            bestidx = j;
-            bestdist = dist;
-        }
-
-        if(bestidx != -1) {
-            cnts[bestidx]++;
-            sum += sq(bestdist);
-        } else {
-            warn("cannot match poi");
-            sum += INF;
-        }
-    }
-    /*TEST*/if (foo != NULL) *foo += TESTloop;
-    
-    /* compute average number of queries matched to one base point */
-    int nzeroCnt=0, nzeroSum=0;
-    for (int i=0; i<(int)base.size(); i++)
-        if (cnts[i]) {
-            nzeroCnt ++;
-            nzeroSum += cnts[i];
-        }
-    float avgMatch = (float)nzeroSum/nzeroCnt;
-    sum *= std::min(1000.f, expf(avgMatch-1));
-    // sum *= powf(nzeroCnt, 2.0f);
-    
-    return sum;
-}
-
-inline void vectorSpan(const std::vector<Point> &v, Agent *a)
-{
-    float minx=INF,miny=INF,maxx=-INF,maxy=-INF;
-    for (int i=0; i<(int)v.size(); i++) {
-        minx = std::min(minx, v[i].x);
-        maxx = std::max(maxx, v[i].x);
-        miny = std::min(miny, v[i].y);
-        maxy = std::max(maxy, v[i].y);
-    }
-    a->mx=minx; a->my=miny; a->Mx=maxx; a->My=maxy;
-}
-inline float vectorSpan(const std::vector<Point> &v)
-{
-    float minx=INF,miny=INF,maxx=-INF,maxy=-INF;
-    for (int i=0; i<(int)v.size(); i++) {
-        minx = std::min(minx, v[i].x);
-        maxx = std::max(maxx, v[i].x);
-        miny = std::min(miny, v[i].y);
-        maxy = std::max(maxy, v[i].y);
-    }
-    return sqrtf((float)(maxx-minx+1.f)*(maxx-minx+1.f) + (float)(maxy-miny+1.f)*(maxy-miny+1.f));
-}
-
-inline float imageSpan(const Image &im, const Matrix &M)
-{
-    return (
-        M*Point(im.getWidth(), im.getHeight())
-      - M*Point(.0f, 0.f)
-    ).dist();
-}
-inline float imageSpan(const Image &im) { return imageSpan(im, Matrix()); }
-
 void Population::EvaluationJob::runOne(Agent *agent)
 {
     const Data *alien = uplink->alien, *known = uplink->known;
-    static const uint8_t K = 200;
-    
-    /* for each POI from known image that is allowed by agent's RECTANGLE
+
+    /* for each POI from known image that is allowed by agent's mask
      * we look for closest POI from alien image. moreover, each alien
      * POI can be used at most K times (this is to prevent matching
      * all known POIs with one or two alien POIs). */
-    
-    Matrix revAgent = agent->M.reverse();
-    
-    assert(known->pois.size());
-    
-    std::vector<Point> aliens, knowns, validaliens;
-    for (int i=0; i<(int)known->pois.size(); i++) {
-        Point p = known->pois[i];
-        // debug("point: %.3f %.3f. %d %d %d %d\n", p.x, p.y, agent->mx, agent->my, agent->Mx, agent->My);
-#if TRYCHOICE == 1
-        if (agent->valid(p))
-#endif
-        {    
-            knowns.push_back(agent->M*p); 
-            agent->mask[i] = true;
-        }
-#if TRYCHOICE == 1
-        else
-            agent->mask[i] = false;
-#endif
-    }
-    agent->antymask.reset();
-    vectorSpan(knowns, agent);
-    assert(agent->antymask.count() == 0);
-    for (int i=0; i<(int)alien->pois.size(); i++) 
+    const char K = 2;
+    char cnts[alien->pois.size()]; /* here we count each use of an alien poi */
+    memset(cnts, 0, sizeof(cnts));
+
+    int fullsearches = 0;
+    float sum = 0;
+    for(int i=0; i<(int)known->pois.size(); i++)
     {
-        Point p = alien->pois[i];
-        if (agent->valid(revAgent*p)) {
-            Point q = revAgent*p, p2 = agent->M*q;
-            // debug("%.2f %.2f --> %.2f %.2f (--> %.2f %.2f)\n", p.x, p.y, q.x, q.y, p2.x, p2.y);
-            validaliens.push_back(p);
-            agent->antymask.set(i);
+        if(!agent->mask[i])
+            continue;
+
+        /* the point we're looking for.
+         * because ProximityMap cannot look beyond its own dimensions,
+         * we need to clamp point's coordinates to lay within. */
+        Point p = agent->M * known->pois[i];
+        p.x = std::min(std::max(p.x, 0.f), alien->prox.getWidth()-1.f);
+        p.y = std::min(std::max(p.y, 0.f), alien->prox.getHeight()-1.f);
+
+        /* first try looking the point up using ProximityArray.
+         * this will succeed very often (well, depending of number of 
+         * entries in the array) */
+        int bestidx = -1;
+        for(int j=0; j<alien->prox.getEntries(); j++) {
+            int idx = alien->prox.at(p.x, p.y)[j];
+            if(cnts[idx] < K) {
+                bestidx = idx;
+                break;
+            }
+        } 
+
+        /* if ProximityArray failed, run the full search */
+        if(bestidx == -1) {
+            fullsearches++;
+            float bestdist = 1e+10f;
+            for(int j=0; j<(int)alien->pois.size(); j++)
+            {
+                float dist = (p - alien->pois[j]).dist();
+                if(cnts[j] < K && dist < bestdist) {
+                    bestdist = dist;
+                    bestidx = j;
+                }
+            }
         }
-        aliens.push_back(p);
+
+        if(bestidx == -1) 
+            warn("cannot match poi %d at %f,%f", i, p.x, p.y);
+        else {
+            cnts[bestidx] ++;
+            sum += (p - alien->pois[bestidx]).distsq();
+        }
     }
-    
-    agent->validCnt = knowns.size();
-    // std::sort(knowns.begin(), knowns.end());
-    
-    float takenRatio = (float)agent->validCnt/known->pois.size(),
-          dist = 0, dist2 = 0;
 
-    /*TEST*/static int which=0; int oper=0;
-    which ++;
-    dist = distance(aliens, knowns, K, &oper) / knowns.size(); /// vectorSpan(knowns);
-        
-    // if (validaliens.size()) dist2 = distance(knowns, validaliens, K, &oper) / validaliens.size() / vectorSpan(aliens);
-    
-    agent->target = -(dist+dist2); /// pow(takenRatio, 1.);
-    
-    /*TEST*/if (which%20000 == 0) 
-        debug("%d vs %d: dist=%.3f+%.3f, valid known=%d, valid alien=%d=%d\n", 
-              aliens.size()*agent->validCnt, oper, dist, dist2, agent->validCnt, validaliens.size(), agent->antymask.count());
+    /* warning! this is not thread-safe, results may be wrong */
+    uplink->fullsearches += fullsearches;
+
+    agent->target = -sum / known->pois.size();
 }
-
 void Population::evaluate()
 {
     const int evalBatch = 50;
@@ -723,9 +640,13 @@ void Population::evaluate()
         jobs[i].end = std::min((int)pop.size(), evalBatch*(i+1));
     }
 
+    fullsearches = 0;
     for(int i=0; i<nJobs; i++)
         aq->queue(&jobs[i]);
     c.wait();
+    debug("did at least %d fullsearches out of %d possible (%.3f%%)",
+            fullsearches, known->pois.size()*pop.size(),
+            100.f*fullsearches / (known->pois.size()*pop.size()));
 
     float minTarget = 1e+30;
     for(int i=0; i<(int)pop.size(); i++)
@@ -765,42 +686,14 @@ int Population::roulette(int n)
 void Population::makeRandom(Agent *a)
 {
     a->mask.set(); /* not too random for now */
-    
-    int W = known->raw.getWidth(), 
-        H = known->raw.getHeight();
-    
-#if TRYCHOICE == 1
-    float dx = Random::positive(W/3)+2.0f*W/3, x1 = Random::positive(W-dx),
-          dy = Random::positive(H/3)+2.0f*H/3, y1 = Random::positive(H-dy);
-          
-    a->mx = x1;
-    a->Mx = x1+dx;
-    a->my = y1;
-    a->My = y1+dy;
-    
-    assert(a->valid(Point(a->mx,a->my)));
-    assert(a->valid(Point(a->Mx,a->My)));
-    assert(a->valid(Point(a->Mx - a->my, a->My - a->my)));
-#else
-    a->mx = a->my = 0;
-    a->Mx = W;
-    a->My = H;
-#endif
-
     a->M = Matrix();
     a->translate(
-            Random::real(cfgTranslateInit) * alien->raw.getWidth(),
-            Random::real(cfgTranslateInit) * alien->raw.getHeight());
+            Random::real(cfgTranslateInit) * known->raw.getWidth(),
+            Random::real(cfgTranslateInit) * known->raw.getHeight());
     a->rotate(Random::real(cfgRotateInit),
             known->originX, known->originY);
-    a->scale(
-        /*(1.f/Random::positive(cfgScaleInit))
-            * Random::randomSign(),
-        (1.f/Random::positive(cfgScaleInit))
-            * Random::randomSign(),*/
-        Random::real(cfgScaleInit),
-        Random::real(cfgScaleInit),
-        known->originX, known->originY);
+    a->scale(1.f+Random::real(cfgScaleInit),1.f+Random::real(cfgScaleInit),
+            known->originX, known->originY);
 }
 void Population::mutation(Agent *a)
 {
@@ -832,28 +725,14 @@ void Population::mutation(Agent *a)
         a->scale(-1, 1, rx, ry);
         a->rotate(-rangle, rx, ry);
     }
-#if TRYCHOICE == 1
-    if (Random::maybe(cfgChoiceProp)) a->mx += Random::gaussian(0, cfgChoiceDev);
-    if (Random::maybe(cfgChoiceProp)) a->Mx += Random::gaussian(0, cfgChoiceDev);
-    if (Random::maybe(cfgChoiceProp)) a->my += Random::gaussian(0, cfgChoiceDev);
-    if (Random::maybe(cfgChoiceProp)) a->My += Random::gaussian(0, cfgChoiceDev);
-#endif
 }
 
 /* --- differential evolution mating */
 void Population::deMating(Agent *a, const Agent *p, const Agent *q, const Agent *r)
 {
-    float mfactor = fabs(Random::gaussian(cfgDEMatingCoeff, cfgDEMatingDev));
+    float factor = fabs(Random::gaussian(cfgDEMatingCoeff, cfgDEMatingDev));
     if(q->fitness < r->fitness) std::swap(q,r);
-    a->M = p->M + (q->M - r->M) * mfactor;
-    /* now rectangle demating */
-#if TRYCHOICE == 1
-    float cfactor = fabs(Random::gaussian(cfgDEMatingCoeff, cfgDEMatingDev));
-    a->mx = p->mx + (q->mx - r->mx) * cfactor;
-    a->Mx = p->Mx + (q->Mx - r->Mx) * cfactor;
-    a->my = p->my + (q->my - r->my) * cfactor;
-    a->My = p->My + (q->My - r->My) * cfactor;
-#endif
+    a->M = p->M + (q->M - r->M) * factor;
 }
 
 /* this tells us when to stop */
@@ -862,7 +741,7 @@ bool Population::terminationCondition() const
     if(generationNumber > cfgMaxGenerations)
         return true;
 
-    return false; /* na razie wylaczony */
+    return false;
     const int K = cfgStopCondParam;
     if ((int)bestScores.size() < 2*K)
         return false;
@@ -891,15 +770,14 @@ Agent Population::evolve()
     for(int i=0; i<(int)pop.size(); i++)
         makeRandom(&pop[i]);
 
-    knownDS.lock(); knownDS.data = known; knownDS.unlock();
-    alienDS.lock(); alienDS.data = alien; alienDS.unlock();
+    knownDS.setFromData(known, false);
     bestDS.lock(); bestDS.known = known; bestDS.alien = alien; bestDS.unlock();
-
+    
     Agent bestEver;
     bestEver.target = -1000000.0f;
-    
-    std::vector<std::vector<float> > logVector;
-    static const int LOGperGEN = 10;
+
+    Timer totalEvolutionTime(CLOCK_PROCESS_CPUTIME_ID);
+    totalEvolutionTime.start();
 
     for(generationNumber = 1; ; generationNumber++)
     {
@@ -907,33 +785,21 @@ Agent Population::evolve()
 
         float survivalRate = getSurvivalRate();
 
-        gui_status("gen: %d, survival: %d%%, best fit: target %.2f fitness %f  |  "
-                   "d=(%.0f,%.0f), s=(%.2f,%.2f), a=%.3f  |   "
-                   "valid=%d,  mx=%d, Mx=%d, my=%d, My=%d",
-                   generationNumber, (int)(survivalRate*100.f),
-                   pop[0].target, pop[0].fitness,
-                   pop[0].dx(),pop[0].dy(),pop[0].sx(),pop[0].sy(),pop[0].alfa()/M_PI*180.0,
-                   pop[0].validCnt,
-                   pop[0].mx, pop[0].Mx, pop[0].my, pop[0].My);
+		gui_status("gen: %d, survival: %d%%, best fit: target %.2f fitness %f  |  d=(%.0f,%.0f), s=(%.2f,%.2f), a=%.3f",
+			       generationNumber, (int)(survivalRate*100.f),
+				   pop[0].target, pop[0].fitness,
+				   pop[0].dx(),pop[0].dy(),pop[0].sx(),pop[0].sy(),pop[0].alfa()/M_PI*180.0);
 
         bestDS.lock();
         bestDS.ms.clear();
         for(int i=0; i<(int)pop.size(); i+=std::max(1, (int)pop.size()/30))
             bestDS.ms.push_back(pop[i].M);
         bestDS.knownMask = pop[0].mask;
-        bestDS.validalienMask = pop[0].antymask;
         bestDS.unlock();
 
         bestScores.push_back(pop[0].target);
         if (bestEver.target < pop[0].target)
             bestEver = pop[0];
-        
-        {
-            logVector.push_back(std::vector<float>(10));
-            logVector.back()[0] = pop[0].target;
-            for (int i=1; i<LOGperGEN; i++)
-                logVector.back()[i] = pop[rand()%pop.size()/2].target;
-        }
         
         int survivors = survivalRate * pop.size();
         for(int i=survivors; i<(int)pop.size(); i++)
@@ -950,16 +816,13 @@ Agent Population::evolve()
         for(int i=0; i<(int)pop.size(); i++)
             mutation(&pop[i]);
         
-        // usleep(10000);
-        
         if(terminationCondition()) break;
     }
-    
-    usleep(2000000);
-    
-    
-    knownDS.lock(); knownDS.data = NULL; knownDS.unlock();
-    alienDS.lock(); alienDS.data = NULL; alienDS.unlock();
+
+    debug("total evolution time: %.3f seconds", totalEvolutionTime.end());
+    sleep(5);
+
+    knownDS.setFromData(NULL, false);
     bestDS.lock(); bestDS.known = bestDS.alien = NULL; bestDS.ms.clear(); bestDS.unlock();
 
     {
@@ -967,11 +830,8 @@ Agent Population::evolve()
         char filename[32];
         sprintf(filename, "evo-%d.log", cnt++);
         FILE *log = fopen(filename, "w");
-        static const int GENtoSTARTwith = 10;
-        // for(int i=0; i<(int)bestScores.size(); i++) fprintf(log,"%.8f\n",bestScores[i]);
-        for (int i=GENtoSTARTwith; i<(int)logVector.size(); i++)
-            for (int j=0; j<LOGperGEN; j++)
-                fprintf(log, "%d %.8f\n", i, logVector[i][j]);
+        for(int i=0; i<(int)bestScores.size(); i++)
+            fprintf(log,"%.8f\n",bestScores[i]);
         fclose(log);
         info("log written to '%s'", filename);
     }
@@ -1068,11 +928,14 @@ int main(int argc, char *argv[])
     /* show up the displayslots */
     knownDS.activate();
     alienDS.activate();
+    alproDS.activate();
     bestDS.bind();
     
     /* read alien image */
     gui_status("loading '%s'...", argv[1]);
     Data alien = Data::build(argv[1]);
+    alienDS.setFromData(&alien, false);
+    alproDS.setFromData(&alien, true);
 
     /* examine all known images */
     std::vector<std::pair<float, const char *> > results;    
@@ -1081,7 +944,7 @@ int main(int argc, char *argv[])
         const char *knownPath = knownPaths[i].c_str();
         okay("processing '%s'", knownPath);
         gui_status("loading '%s'...", knownPath);
-        Data known = Data::build(knownPath); 
+        Data known = Data::build(knownPath);
         Agent best = Population(&known, &alien).evolve();
         info("best score was %f", best.target);
         results.push_back(std::make_pair(best.target, knownPath));
@@ -1096,51 +959,8 @@ int main(int argc, char *argv[])
     /* and now shut down the GUI, or it will abort() */
     knownDS.deactivate();
     alienDS.deactivate();
+    alproDS.deactivate();
     bestDS.deactivate();
     
     return 0;
 }
-/*void Population::EvaluationJob::runOne(Agent *agent)
-{
-    const Data *alien = uplink->alien, *known = uplink->known;
-    
-    const char K = 2;
-    char cnts[alien->pois.size()]; 
-    memset(cnts, 0, sizeof(cnts));
-    
-    float sum = 0;
-    for(int i=0; i<(int)known->pois.size(); i++)
-    {
-        if(!agent->mask[i])
-            continue;
-
-        Point p = agent->M * known->pois[i];
-
-        int bestidx = -1; float bestdist = 1e+10f;
-        for(int j=0; j<(int)alien->pois.size(); j++)
-        {
-            if(cnts[j] >= K)
-                continue;
-            float dist = (p - alien->pois[j]).dist();
-            if(dist >= bestdist)
-                continue;
-            bestidx = j;
-            bestdist = dist;
-        }
-
-        if(bestidx != -1) {
-            cnts[bestidx]++;
-            sum += bestdist;
-        } else {
-            warn("cannot match poi %d", i);
-            sum += 1e+10f;
-        }
-    }
-
-    agent->target = -sum / (alien->pois.size() + known->pois.size());
-    // now add a penalty for too high flattening
-    float sx = agent->sx(), 
-          sy = agent->sy();
-    float flatCoef = std::max(1.0f, std::max(sx/sy, sy/sx)/cfgMaxScaleRatio);
-    agent->target *= expf(flatCoef);
-}*/

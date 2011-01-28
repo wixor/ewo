@@ -33,7 +33,7 @@ void gui_bind(struct displayslot *);
 void gui_unbind(struct displayslot *);
 
 /* do not use this, see gui_upload from gui.h */
-cairo_surface_t *gui_do_upload(int width, int height, const void *bytes);
+cairo_surface_t *gui_do_upload(int width, int height, const void *bytes, int gray);
 
 void gui_status(const char *fmt, ...);
 void gui_init(int *argc, char ***argv);

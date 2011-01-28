@@ -95,4 +95,12 @@ public:
     }
 };
 
+class ColorImage : public Array2D<uint32_t>
+{
+public:
+    inline ColorImage() : Array2D<uint32_t>() { }
+    inline ColorImage(int w, int h) : Array2D<uint32_t>(w, h) {}
+    inline ColorImage(const ColorImage& im) : Array2D<uint32_t>(im) {}
+};
+
 #endif

@@ -54,8 +54,7 @@ void DisplaySlot::fill(rgba color)
 
 void DisplaySlot::drawImage(CairoImage ci, const Matrix *m, bool difference)
 {
-    cairo_surface_t *surface = ci;
-    cairo_pattern_t *pattern = cairo_pattern_create_for_surface(surface);
+    cairo_save(cr);
 
     cairo_matrix_t m1, m2;
     if(m) {
@@ -68,18 +67,19 @@ void DisplaySlot::drawImage(CairoImage ci, const Matrix *m, bool difference)
         cairo_set_matrix(cr, &m1);
     }
 
-    int w = ci.getWidth(), h = ci.getHeight();
-
+    cairo_surface_t *surface = ci;
+    cairo_pattern_t *pattern = cairo_pattern_create_for_surface(surface);
     cairo_set_source(cr, pattern);
+    
+    cairo_rectangle(cr, 0,0, ci.getWidth(),ci.getHeight());
+    cairo_clip(cr);
+    
     if(difference)
         cairo_paint_with_alpha(cr, 0.5);
-    else {
-        cairo_rectangle(cr, 0,0, w,h);
-        cairo_fill(cr);
-    }
+    else
+        cairo_paint(cr);
 
-    if(m)
-        cairo_set_matrix(cr, &m2);
+    cairo_restore(cr);
 
     cairo_pattern_destroy(pattern);
 }

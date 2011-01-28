@@ -13,11 +13,17 @@
 /* wrapper around gui_do_upload from gui-gtk.c */
 static inline CairoImage gui_upload(const Image &im)
 {
-    cairo_surface_t *s = gui_do_upload(im.getWidth(), im.getHeight(), im[0]);
+    cairo_surface_t *s = gui_do_upload(im.getWidth(), im.getHeight(), im[0], 1);
     if(!s) throw std::bad_alloc();
     return CairoImage(s);
 }
 
+static inline CairoImage gui_upload(const ColorImage &im)
+{
+    cairo_surface_t *s = gui_do_upload(im.getWidth(), im.getHeight(), im[0], 0);
+    if(!s) throw std::bad_alloc();
+    return CairoImage(s);
+}
 
 struct rgba {
     float r,g,b,a;
