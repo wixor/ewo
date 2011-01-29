@@ -14,6 +14,10 @@
 #define fail(fmt, ...)  printf("!! " fmt "\n", ## __VA_ARGS__)
 #define debug(fmt, ...) printf(".. " fmt "\n", ## __VA_ARGS__)
 
+extern void (*progress)(float val);
+void null_progress(float);
+void text_progress(float val);
+
 /* -------------------------------------------------------------------------- */
 
 template <typename T> class Array2D

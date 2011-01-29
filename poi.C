@@ -119,6 +119,8 @@ void POIFinder::evaluate()
     int border = 2.5f * (*std::max_element(scales.begin(), scales.end()));
     int w = src->getWidth(), h = src->getHeight();
 
+    progress(0);
+
     Array2D<float> globalProfile[steps];
     for(int i=0; i<steps; i++) {
         globalProfile[i] = Array2D<float>(w,h);
@@ -162,6 +164,8 @@ void POIFinder::evaluate()
                 for(int y=0; y<h; y++)
                     for(int x=0; x<w; x++)
                         globalProfile[i][y][x] *= currentProfile[i][y][x];
+           
+            progress((float)(s+1) / (float)scales.size());
         }
     }
 
@@ -459,11 +463,14 @@ bool ProximityMap::canVisit(const djk &o) const
 void ProximityMap::build(const POIvec &pois)
 {
     /* how many entries we still have to fill */
-    int leftToDo = widet * hedet * entries;
+    int allToDo = widet * hedet * entries,
+        leftToDo = allToDo;
 
     npois = pois.size();
     assert(npois < 65536); /* because poiid_t is unsigned short */
     assert(entries <= npois);
+
+    progress(0);
 
     /* this is temporary array that keeps track of how many entries were added
      * to each field. when the algoritm finishes, all fields have 'entries'
@@ -491,7 +498,8 @@ void ProximityMap::build(const POIvec &pois)
         pushEntry(o);
         leftToDo--;
 
-        if(leftToDo % 10000 == 0) debug("proximity: left %d", leftToDo);
+        if(leftToDo % 20000 == 0) 
+            progress((float)(allToDo - leftToDo) / (float)allToDo);
 
         for(int dx=-1; dx<=1; dx++)
             for(int dy=-1; dy<=1; dy++)

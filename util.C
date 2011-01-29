@@ -1,7 +1,15 @@
+#include <cstdio>
 #include <ctime>
 #include <pthread.h>
 
 #include "util.h"
+
+void (*progress)(float val) = null_progress;
+void null_progress(float val) {
+}
+void text_progress(float val) {
+    debug("progress: %.2f%%", val*100.f);
+}
 
 /* ----------------------------------------------------------------------- */
 

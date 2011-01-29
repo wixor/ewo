@@ -185,13 +185,19 @@ public:
 
 void Data::doBuild(const char *filename)
 {
+    gui_status("loading '%s'", filename);
+
     raw = Image::read(filename);
 
     try {
         readCached(filename);
-    } catch(std::exception &e) {
+    } catch(std::exception &e)
+    {
         warn("failed to read cache: %s", e.what());
+
+        gui_status("loading '%s': looking for POIs", filename);
         findPOIs();
+        gui_status("loading '%s': building proximity map", filename);
         buildProxMap();
         findOrigin();
         writeCache(filename);
@@ -199,6 +205,8 @@ void Data::doBuild(const char *filename)
 
     caimg = gui_upload(raw);
     proxci = gui_upload(prox.visualize());
+
+    progress(-1);
 }
 
 void Data::findPOIs()
@@ -303,6 +311,7 @@ void Data::readCached(const char *filename)
                    cfgProxMapEntries * sizeof(ProximityMap::poiid_t);
     prox.resize(raw.getWidth(), raw.getHeight(),
                 cfgProxMapDetail, cfgProxMapEntries);
+    prox.setNPois(pois.size());
     if(fread(prox.at(0,0), proxsize,1, f) != 1) {
         pois.clear();
         prox.resize(0,0,0,0);
@@ -903,6 +912,7 @@ int main(int argc, char *argv[])
      * must go before looking at argc, argv and before
      * calling gui_upload, which is done by Data::build */
     gui_init(&argc, &argv);
+    progress = gui_progress;
     setlocale(LC_ALL, "POSIX"); /* because glib thinks we should use comma as decimal separator... */
 
     /* check if there's enough command arguments */
@@ -945,7 +955,6 @@ int main(int argc, char *argv[])
     bestDS.bind();
     
     /* read alien image */
-    gui_status("loading '%s'...", argv[1]);
     Data alien = Data::build(argv[1]);
     alienDS.setFromData(&alien, false);
     alproDS.setFromData(&alien, true);
@@ -956,7 +965,6 @@ int main(int argc, char *argv[])
     {
         const char *knownPath = knownPaths[i].c_str();
         okay("processing '%s'", knownPath);
-        gui_status("loading '%s'...", knownPath);
         Data known = Data::build(knownPath);
         Agent best = Population(&known, &alien).evolve();
         info("best score was %f", best.target);

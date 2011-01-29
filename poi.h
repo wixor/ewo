@@ -133,6 +133,7 @@ public:
     inline int getDetail() const { return detail; }
     inline int getEntries() const { return entries; }
     inline int getNPois() const { return npois; }
+    inline void setNPois(int npois) { this->npois = npois; }
 
     ColorImage visualize() const;
 

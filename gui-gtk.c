@@ -41,9 +41,11 @@ static GtkToolbar *toolbar;
 static GtkToolButton *single, *hsplit, *vsplit, *quad;
 
 static pthread_mutex_t statlock;
+static char *statmsg;
+static float progressval = -1.f;
 static int statusbar_ctx;
 static GtkStatusbar *statusbar;
-static char *statmsg;
+static GtkProgressBar *progressbar;
 
 /* ------------------------------------------------------------------------- */
 
@@ -272,6 +274,13 @@ void gui_status(const char *fmt, ...)
     pthread_mutex_unlock(&statlock);
 }
 
+void gui_progress(float value)
+{
+    pthread_mutex_lock(&statlock);
+    progressval = value;
+    pthread_mutex_unlock(&statlock);
+}
+
 static cairo_user_data_key_t gui_free_pixmap_key;
 static void gui_free_pixmap(void *data)
 {
@@ -325,8 +334,15 @@ static gboolean gui_refresh(gpointer data)
         displayarea_refresh(&areas[i]);
     
     gtk_statusbar_pop(statusbar, statusbar_ctx);
+
     pthread_mutex_lock(&statlock);
     gtk_statusbar_push(statusbar, statusbar_ctx, statmsg);
+    if(progressval < 0)
+        gtk_widget_hide(GTK_WIDGET(progressbar));
+    else {
+        gtk_widget_show(GTK_WIDGET(progressbar));
+        gtk_progress_bar_set_fraction(progressbar, progressval);
+    }
     pthread_mutex_unlock(&statlock);
 
     gdk_threads_leave();
@@ -391,6 +407,8 @@ static void *gui_thread(void *args_)
 
     pthread_mutex_init(&statlock, NULL);
     statusbar = GTK_STATUSBAR(gtk_statusbar_new());
+    progressbar = GTK_PROGRESS_BAR(gtk_progress_bar_new());
+    gtk_box_pack_start(GTK_BOX(statusbar), GTK_WIDGET(progressbar), FALSE, FALSE, 5);
     statusbar_ctx = gtk_statusbar_get_context_id(statusbar,"");
     statmsg = strdup("");
 

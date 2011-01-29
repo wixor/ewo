@@ -36,6 +36,7 @@ void gui_unbind(struct displayslot *);
 cairo_surface_t *gui_do_upload(int width, int height, const void *bytes, int gray);
 
 void gui_status(const char *fmt, ...);
+void gui_progress(float value);
 void gui_init(int *argc, char ***argv);
 
 #ifdef __cplusplus

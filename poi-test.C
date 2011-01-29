@@ -31,6 +31,7 @@ int main(int argc, char *argv[])
 {
     spawn_worker_threads(2);
     gui_init(&argc, &argv);
+    progress = gui_progress;
 
     Image im = Image::read(argv[1]);
 
