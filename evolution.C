@@ -776,7 +776,7 @@ Agent Population::evolve()
     Agent bestEver;
     bestEver.target = -1000000.0f;
     
-    const inst logPerGen = 10;
+    const int logPerGen = 10;
     std::vector<std::vector<float> > logVector;
 
     Timer totalEvolutionTime(CLOCK_PROCESS_CPUTIME_ID);
