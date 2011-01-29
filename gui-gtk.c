@@ -295,10 +295,10 @@ cairo_surface_t *img_make_surface(int width, int height, const void *bytes, int 
 cairo_surface_t *gui_do_upload(int width, int height, const void *bytes, int gray)
 {
     cairo_surface_t *source = img_make_surface(width, height, bytes, gray);
-    return source; /* the upload-to-xserver optimization hangs gdk. why, oh why? */
     if(!source) return NULL;
 
     gdk_threads_enter();
+    gdk_flush();
 
     /* zonk!
      * the open-source radeon ddx needs rgba buffers to do non-repeating transformed compositing.
@@ -319,6 +319,7 @@ cairo_surface_t *gui_do_upload(int width, int height, const void *bytes, int gra
     cairo_paint(cr);
     cairo_destroy(cr);
 
+    XSync(display, True);
     gdk_threads_leave();
 
     cairo_surface_destroy(source);
