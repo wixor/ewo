@@ -295,6 +295,7 @@ cairo_surface_t *img_make_surface(int width, int height, const void *bytes, int 
 cairo_surface_t *gui_do_upload(int width, int height, const void *bytes, int gray)
 {
     cairo_surface_t *source = img_make_surface(width, height, bytes, gray);
+    return source;
     if(!source) return NULL;
 
     gdk_threads_enter();
