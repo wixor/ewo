@@ -3,6 +3,7 @@
 #include <cmath>
 #include <vector>
 #include <queue>
+#include <set>
 #include <algorithm>
 #include <stdexcept>
 
@@ -274,6 +275,130 @@ void POIFinder::run(void)
 
 /* ------------------------------------------------------------------------ */
 
+class ProximityMapVisualizer
+{
+    typedef ProximityMap::poiid_t poiid_t;
+
+    const ProximityMap *prox;
+    int ent;
+    
+    std::vector<int> colors;
+    std::vector<std::vector<poiid_t> > edges;
+
+    void makeGraph();
+    void dfs(int v);
+    void findColoring(void);
+    ColorImage createImage();
+
+public:
+    ColorImage build(const ProximityMap &prox, int ent);
+};
+
+void ProximityMapVisualizer::makeGraph()
+{
+    int npois = prox->getNPois(),
+        width = prox->getWidth(),
+        height = prox->getHeight();
+
+    std::set<std::pair<poiid_t, poiid_t> > S;
+
+    for(int y=1; y<height; y++)
+        for(int x=1; x<width; x++) {
+            poiid_t here = prox->at(x,y)[ent],
+                    a    = prox->at(x-1,y)[ent],
+                    b    = prox->at(x,y-1)[ent],
+                    c    = prox->at(x-1,y-1)[ent];
+            if(here != a)
+                S.insert(std::make_pair(std::min(a, here), std::max(a, here)));
+            if(here != b)
+                S.insert(std::make_pair(std::min(b, here), std::max(b, here)));
+            if(here != c)
+                S.insert(std::make_pair(std::min(c, here), std::max(c, here)));
+        }
+
+    edges.clear();
+    edges.resize(npois);
+    for(std::set<std::pair<poiid_t, poiid_t> >::iterator it = S.begin(); it != S.end(); it++) {
+        edges[it->first].push_back(it->second);
+        edges[it->second].push_back(it->first);
+    }
+
+    colors.resize(npois);
+    for(int i=0; i<npois; i++)
+        colors[i] = -1;
+}
+
+void ProximityMapVisualizer::dfs(int v)
+{
+    bool used[12] = { };
+
+    for(int i=0; i<(int)edges[v].size(); i++)
+        if(colors[edges[v][i]] != -1) 
+            used[colors[edges[v][i]]] = true;
+
+    int mycolor = -1;
+    for(int i=0; i<12; i++)
+        if(!used[i]) {
+            mycolor = i;
+            break;
+        }
+    if(mycolor == -1) {
+        warn("unable to dumb-12-color graph");
+        mycolor = 0;
+    }
+
+    colors[v] = mycolor;
+    
+    for(int i=0; i<(int)edges[v].size(); i++)
+        if(colors[edges[v][i]] == -1) 
+            dfs(edges[v][i]);
+}
+
+void ProximityMapVisualizer::findColoring(void)
+{
+    for(int i=0; i<prox->getNPois(); i++)
+        if(colors[i] == -1)
+            dfs(i);
+}
+
+ColorImage ProximityMapVisualizer::createImage()
+{
+    static const uint32_t rgba[12] = /* 12 colors */
+        { 0xffff0000, /* red */
+          0xff00ff00, /* green */
+          0xff0000ff, /* blue */
+          0xffa0a000, /* yellow */
+          0xffff40ff, /* violet */
+          0xff20e0ff, /* cyan */
+          0xffffc010, /* orange */
+          0xffa00000, /* dark red */
+          0xff008000, /* dark green */
+          0xff0000a0, /* dark blue */
+          0xffc3a823, /* ? */
+          0xff99a103, /* ? */ };
+
+    int width = prox->getWidth(),
+        height = prox->getHeight();
+
+    ColorImage ret(width, height);
+    for(int y=0; y<height; y++)
+        for(int x=0; x<width; x++)
+            ret[y][x] = rgba[colors[prox->at(x,y)[ent]]];
+    return ret;
+}
+
+ColorImage ProximityMapVisualizer::build(const ProximityMap &prox, int ent)
+{
+    this->prox = &prox;
+    this->ent = ent;
+    
+    makeGraph();
+    findColoring();
+    return createImage();
+}
+
+/* ------------------------------------------------------------------------ */
+
 ProximityMap::ProximityMap(void) {
     width = height = detail = entries = widet = hedet = 0; 
     data = NULL;
@@ -298,41 +423,8 @@ void ProximityMap::resize(int width, int height, int detail, int entries)
 
 ColorImage ProximityMap::visualize() const
 {
-    /* we do not perform map coloring here. just hope that given
-     * so many colors, two adjacent areas won't be sharing one color too often */
-    static const uint32_t colors[] = 
-        { 0xffff0000, /* red */
-          0xff00ff00, /* green */
-          0xff0000ff, /* blue */
-          0xffa0a000, /* yellow */
-          0xffff40ff, /* violet */
-          0xff20e0ff, /* cyan */
-          0xffffc010, /* orange */
-          0xffa00000, /* dark red */
-          0xff008000, /* dark green */
-          0xff0000a0, /* dark blue */
-          0xffc3a823, /* ? */
-          0xff99a103, /* ? */
-          0xffc9ff2e, /* ? */
-          0xff6349aa, /* ? */
-          0xff9ff3e1, /* ? */
-          0xff8efdca, /* ? */
-          0xff6349aa, /* ? */
-          0xff9efffe, /* ? */
-          0xff834efa, /* ? */
-          0xffabcdef, /* ? */
-          0xff12e5fe, /* ? */
-          0xff92cdff, /* ? */
-          0
-        };
-    int n_colors = 0;
-    while(colors[n_colors]) n_colors++;
-
-    ColorImage ret(width, height);
-    for(int y=0; y<height; y++)
-        for(int x=0; x<width; x++)
-            ret[y][x] = colors[at(x,y)[0] % n_colors];
-    return ret;
+    ProximityMapVisualizer vis;
+    return vis.build(*this, 0);
 }
 
 void ProximityMap::pushEntry(const djk &o)
@@ -369,8 +461,9 @@ void ProximityMap::build(const POIvec &pois)
     /* how many entries we still have to fill */
     int leftToDo = widet * hedet * entries;
 
-    assert(pois.size() < 65536); /* because poiid_t is unsigned short */
-    assert(entries <= (int)pois.size());
+    npois = pois.size();
+    assert(npois < 65536); /* because poiid_t is unsigned short */
+    assert(entries <= npois);
 
     /* this is temporary array that keeps track of how many entries were added
      * to each field. when the algoritm finishes, all fields have 'entries'
@@ -380,7 +473,7 @@ void ProximityMap::build(const POIvec &pois)
 
     std::priority_queue<djk> Q;
 
-    for(poiid_t i=0; i<(poiid_t)pois.size(); i++)
+    for(poiid_t i=0; i<npois; i++)
     {
         int xi = roundf(pois[i].x*detail),
             yi = roundf(pois[i].y*detail);

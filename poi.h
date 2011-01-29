@@ -92,6 +92,7 @@ public:
 private:
     int width, height, detail, entries;
     poiid_t *data;
+    int npois;
    
     /* those are used only during map's building.
      * the array is freed after use */ 
@@ -131,6 +132,7 @@ public:
     inline int getHeight() const { return height; }
     inline int getDetail() const { return detail; }
     inline int getEntries() const { return entries; }
+    inline int getNPois() const { return npois; }
 
     ColorImage visualize() const;
 
