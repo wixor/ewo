@@ -28,29 +28,11 @@ inline POI operator*(const Matrix &M, const POI &p) {
 
 typedef std::vector<POI> POIvec;
 
-class POIFinder
-{
-public:
-    const Image *src;
-
-    std::vector<float> scales;
-    int steps;
-
-    float threshold;
-    int count;
-    float tabuScale;
-
-    Array2D<float> eval;
-    POIvec all, selected;
-
-    void evaluate();
-    Image visualize();
-    void getAll();
-    void filter();
-    void select();
-
-    void run(void);
-};
+Array2D<float> evaluateImage(const Image &src, const std::vector<float> &scales, int steps);
+Image visualizeEvaluation(const Array2D<float> &eval);
+POIvec extractPOIs(const Array2D<float> &eval, float threshold);
+POIvec filterPOIs(const POIvec &all, int count, float tabuScale, const Matrix &M);
+POIvec filterPOIs(const POIvec &all, int count);
 
 /* ----------------------------------------------------------------------- */
 
@@ -92,7 +74,6 @@ public:
 private:
     int width, height, detail, entries;
     poiid_t *data;
-    int npois;
    
     /* those are used only during map's building.
      * the array is freed after use */ 
@@ -132,8 +113,6 @@ public:
     inline int getHeight() const { return height; }
     inline int getDetail() const { return detail; }
     inline int getEntries() const { return entries; }
-    inline int getNPois() const { return npois; }
-    inline void setNPois(int npois) { this->npois = npois; }
 
     ColorImage visualize() const;
 

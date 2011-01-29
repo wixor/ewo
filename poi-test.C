@@ -35,37 +35,35 @@ int main(int argc, char *argv[])
 
     Image im = Image::read(argv[1]);
 
-    POIFinder pf;
-    pf.src = &im;
-    pf.scales.push_back(1);
-    pf.scales.push_back(3);
-    pf.scales.push_back(8);
-    pf.steps = 16;
-    pf.count = 60;
-    pf.threshold = 30;
-    pf.tabuScale = 0;
-    info("looking for POIs");
-    pf.run();
+    gui_status("looking for pois");
+    
+    std::vector<float> scales;
+    scales.push_back(1);
+    scales.push_back(3);
+    scales.push_back(8);
 
-    Image eval = pf.visualize();
+    Array2D<float> eval = evaluateImage(im, scales, 16);
+    POIvec all = extractPOIs(eval, 30);
+    POIvec pois = filterPOIs(all, 60) ;
+
     ImageDisplaySlot evalds("evaluation", rgba(1,0,0,1));
-    evalds.ci = gui_upload(eval);
+    evalds.ci = gui_upload(visualizeEvaluation(eval));
     evalds.activate();
 
     ImageDisplaySlot imds("image & pois", rgba(.1,1,.1,.5));
     imds.ci = gui_upload(im);
-    imds.ps = std::vector<Point>(pf.selected.begin(), pf.selected.end());
+    imds.ps = std::vector<Point>(pois.begin(), pois.end());
     imds.bind();
 
-    info("building proximity info");
+    gui_status("building proximity info");
     ProximityMap pm;
     pm.resize(im.getWidth(), im.getHeight(), 1, 8);
-    pm.build(pf.selected);
+    pm.build(pois);
 
 
     ImageDisplaySlot proxds("proximity", rgba(1,1,1,1));
     proxds.ci = gui_upload(pm.visualize());
-    proxds.ps = std::vector<Point>(pf.selected.begin(), pf.selected.end());
+    proxds.ps = imds.ps;
     proxds.dotsize = 3;
     proxds.bind();
 

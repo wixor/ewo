@@ -60,6 +60,8 @@ public:
     float dx, dy, scale;
     int x1,x2, y1,y2;
 
+    float progress_step, *progress_done;
+
     virtual ~DifferenceJob();
     virtual void run();
 };
@@ -110,14 +112,18 @@ void DifferenceJob::run()
     for(int y = y1; y < y2; y++)
         for(int x = x1; x < x2; x++)
             (*dst)[y][x] = evalAt(x,y);
+
+    /* warning: thread-unsafe! */
+    if(progress_done)
+        progress((*progress_done) += progress_step);
 }
     
 /* ------------------------------------------------------------------------ */
 
-void POIFinder::evaluate()
+Array2D<float> evaluateImage(const Image &src, const std::vector<float> &scales, int steps)
 {
     int border = 2.5f * (*std::max_element(scales.begin(), scales.end()));
-    int w = src->getWidth(), h = src->getHeight();
+    int w = src.getWidth(), h = src.getHeight();
 
     progress(0);
 
@@ -132,10 +138,13 @@ void POIFinder::evaluate()
         for(int i=0; i<steps; i++)
             currentProfile[i] = Array2D<float>(w,h);
         
-        PrefixSums ps(*src);
+        PrefixSums ps(src);
 
         DifferenceJob jobs[steps];
         Completion c;
+
+        float progress_step = 1.f/(steps * scales.size());
+        float progress_done = 0.f;
 
         for(int i=0; i<steps; i++) {
             jobs[i].src = &ps;
@@ -144,6 +153,8 @@ void POIFinder::evaluate()
             jobs[i].y1 = border;
             jobs[i].x2 = w-border;
             jobs[i].y2 = h-border;
+            jobs[i].progress_step = progress_step;
+            jobs[i].progress_done = &progress_done;
             jobs[i].completion = &c;
         }
         
@@ -164,8 +175,6 @@ void POIFinder::evaluate()
                 for(int y=0; y<h; y++)
                     for(int x=0; x<w; x++)
                         globalProfile[i][y][x] *= currentProfile[i][y][x];
-           
-            progress((float)(s+1) / (float)scales.size());
         }
     }
 
@@ -178,14 +187,15 @@ void POIFinder::evaluate()
                 mins[y][x] = std::min(mins[y][x], globalProfile[i][y][x]);
             }
 
-    eval = Array2D<float>(w,h);
+    Array2D<float> eval(w,h);
     eval.fill(0.f);
     for(int y=border; y<h-border; y++)
         for(int x=border; x<w-border; x++)
             eval[y][x] = powf(maxs[y][x] - mins[y][x], 1.0f/scales.size());
+    return eval;
 }
 
-Image POIFinder::visualize()
+Image visualizeEvaluation(const Array2D<float> &eval)
 {
     int w = eval.getWidth(), h = eval.getHeight();
 
@@ -202,37 +212,50 @@ Image POIFinder::visualize()
     return ret;
 }
 
-void POIFinder::getAll(void)
+POIvec extractPOIs(const Array2D<float> &eval, float threshold)
 {
     int w = eval.getWidth(), h = eval.getHeight();
 
-    all.clear();
-    all.reserve(w*h);
+    POIvec all;
     for(int y=0; y<h; y++)
         for(int x=0; x<w; x++)
-            all.push_back(POI(x,y,eval[y][x]));
+            if(eval[y][x] >= threshold)
+                all.push_back(POI(x,y,eval[y][x]));
     std::sort(all.begin(), all.end());
+    return all;
 }
 
-void POIFinder::filter(void)
+POIvec filterPOIs(const POIvec &all, int count, float tabuScale, const Matrix &M)
 {
-    int w = eval.getWidth(), h = eval.getHeight();
+    float minx = 1000000000, maxx = -1000000000,
+          miny = 1000000000, maxy = -1000000000;
+    for(int i=0; i<(int)all.size(); i++) {
+        POI p = M * all[i];
+        minx = std::min(minx, p.x);
+        maxx = std::max(maxx, p.x);
+        miny = std::min(miny, p.y);
+        maxy = std::max(maxy, p.y);
+    }
+    
+    minx -= 10; miny -= 10;
+    maxx += 10; maxy += 10;
+
+    int w = ceilf(maxx - minx), h = ceilf(maxy - miny);
     Image tabu(w,h);
     tabu.fill(0);
 
-    selected.clear();
+    POIvec selected;
 
     for(int i=0; i<(int)all.size() && (int)selected.size() < count; i++)
     {
-        const POI &curr = all[i];
-        int x = (int)curr.x, y = (int)curr.y;
+        POI p = M * all[i];
+        int x = roundf(p.x - minx), y = roundf(p.y - miny);
         
         if(tabu[y][x]) continue;
-        if(curr.val < threshold) break;
         
-        selected.push_back(curr);
+        selected.push_back(p);
         
-        float R = tabuScale / curr.val;
+        float R = tabuScale / p.val;
         int iR = (int)ceilf(R);
 
         for (int dy=-iR; dy<=iR; dy++)
@@ -240,41 +263,32 @@ void POIFinder::filter(void)
                 if (dx*dx+dy*dy <= (int)(R*R) && tabu.inside(x+dx, y+dy))
                     tabu[y+dy][x+dx] = 1;
     }
+
+    return selected;
 }
 
-void POIFinder::select(void)
+POIvec filterPOIs(const POIvec &all, int count)
 {
     float downval = 1.f, upval = 3000.0f;
-    
-    int requestedCount = count;
-    count = count * 4 / 3;
+
+    Matrix id;
+    POIvec selected;
 
     while(upval-downval > 10.f)
     {
-        tabuScale = .5f*(upval+downval);
-        filter();
+        float midval = .5f*(upval+downval);
+        selected = filterPOIs(all, count * 4 / 3, midval, id);
 
-        if((int)selected.size() == requestedCount)
+        if((int)selected.size() == count)
             break;
 
-        if((int)selected.size() > requestedCount) 
-            downval = tabuScale;
+        if((int)selected.size() > count) 
+            downval = midval;
         else
-            upval = tabuScale;
+            upval = midval;
     }
 
-    count = requestedCount;
-}
-
-void POIFinder::run(void)
-{
-    evaluate();
-    getAll();
-
-    if(tabuScale <= 0)
-        select();
-    else
-        filter();
+    return selected;
 }
 
 /* ------------------------------------------------------------------------ */
@@ -285,6 +299,7 @@ class ProximityMapVisualizer
 
     const ProximityMap *prox;
     int ent;
+    int npois;
     
     std::vector<int> colors;
     std::vector<std::vector<poiid_t> > edges;
@@ -300,11 +315,12 @@ public:
 
 void ProximityMapVisualizer::makeGraph()
 {
-    int npois = prox->getNPois(),
-        width = prox->getWidth(),
+    int width = prox->getWidth(),
         height = prox->getHeight();
 
     std::set<std::pair<poiid_t, poiid_t> > S;
+
+    npois = 0;
 
     for(int y=1; y<height; y++)
         for(int x=1; x<width; x++) {
@@ -318,7 +334,13 @@ void ProximityMapVisualizer::makeGraph()
                 S.insert(std::make_pair(std::min(b, here), std::max(b, here)));
             if(here != c)
                 S.insert(std::make_pair(std::min(c, here), std::max(c, here)));
+
+            npois = std::max(npois, (int)here);
+            npois = std::max(npois, (int)a);
+            npois = std::max(npois, (int)b);
+            npois = std::max(npois, (int)c);
         }
+    npois++;
 
     edges.clear();
     edges.resize(npois);
@@ -360,7 +382,7 @@ void ProximityMapVisualizer::dfs(int v)
 
 void ProximityMapVisualizer::findColoring(void)
 {
-    for(int i=0; i<prox->getNPois(); i++)
+    for(int i=0; i<npois; i++)
         if(colors[i] == -1)
             dfs(i);
 }
@@ -395,7 +417,7 @@ ColorImage ProximityMapVisualizer::build(const ProximityMap &prox, int ent)
 {
     this->prox = &prox;
     this->ent = ent;
-    
+
     makeGraph();
     findColoring();
     return createImage();
@@ -466,7 +488,7 @@ void ProximityMap::build(const POIvec &pois)
     int allToDo = widet * hedet * entries,
         leftToDo = allToDo;
 
-    npois = pois.size();
+    int npois = (int)pois.size();
     assert(npois < 65536); /* because poiid_t is unsigned short */
     assert(entries <= npois);
 
