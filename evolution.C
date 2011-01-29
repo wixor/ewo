@@ -118,34 +118,6 @@ static void parseSurvivalEq(const char *value) {
 
 /* ------------------------------------------------------------------------ */
 
-class Random
-{
-public:
-    static inline bool coin() {
-        return rand()&1;
-    }
-    static inline bool maybe(float prop) {
-        return rand() <= prop*RAND_MAX;
-    }
-    static inline float positive(float max) {
-        return max*((float)rand() / RAND_MAX);
-    }
-    static inline float real(float max) {
-        return coin() ? positive(max) : -positive(max);
-    }
-    static float gaussian(float mean, float deviation) {
-        /* Box-Muller transform ftw ;) */
-        float p = positive(1), q = positive(1);
-        float g = sqrtf(-2.0f * logf(p)) * cosf(2.0f*M_PI*q);
-        return g*deviation + mean;
-    }
-    static float trigauss(float m1, float d1, float m2, float d2) {
-        return (gaussian(m1,d1) + gaussian(m1+m2,d2) + gaussian(m1-m2,d2))/3.f;
-    }
-};
-
-/* ------------------------------------------------------------------------ */
-
 class Data
 {
     inline void findOrigin();
