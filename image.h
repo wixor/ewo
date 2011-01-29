@@ -39,7 +39,7 @@ public:
     {
         if(surface) cairo_surface_destroy(surface);
         surface = ci.surface;
-        cairo_surface_reference(surface);
+        if(surface) cairo_surface_reference(surface);
         return *this;
     }
     
