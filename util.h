@@ -103,6 +103,8 @@ struct Point
     inline Point operator-(const Point &p) const { return Point(x-p.x, y-p.y); }
     inline float distsq() const { return x*x + y*y; }
     inline float dist() const { return sqrtf(distsq()); }
+    /* distance used in evaluation */
+    inline float disteval() const { float a = distsq(); return a*a*a; }
 
     inline bool operator<(const Point &p) const {
         return x != p.x ? x < p.x : y < p.y;
