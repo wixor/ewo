@@ -642,7 +642,7 @@ float Population::distance(const Data *base, const POIvec &queryvec, EvaluationJ
             for(int j=0; j<(int)base->sparse.size(); j++)
             {
                 operations ++;
-                float dist = (p - base->sparse[j]).dist();
+                float dist = (p - base->sparse[j]).distsq();
                 if(cnts[j] < K && dist < bestdist) {
                     bestdist = dist;
                     bestidx = j;
