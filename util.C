@@ -13,11 +13,7 @@ void text_progress(float val) {
 
 /* ----------------------------------------------------------------------- */
 
-void Timer::start(void) {
-    clock_gettime(clock, &ts);
-}
-
-float Timer::end(void) {
+float Timer::gettime(void) {
     struct timespec now;
     clock_gettime(clock, &now);
     if(now.tv_nsec < ts.tv_nsec)
@@ -25,6 +21,35 @@ float Timer::end(void) {
     now.tv_nsec -= ts.tv_nsec;
     now.tv_sec -= ts.tv_sec;
     return (float)now.tv_sec + 0.000000001f*now.tv_nsec;
+}
+
+/* public: */
+void Timer::start(void) {
+    clock_gettime(clock, &ts);
+    isrunning = true;
+    delay = 0.0f;
+}
+
+void Timer::pause(void) {
+    if (!isrunning)
+        return ;
+    isrunning = false;
+    delay -= gettime();
+}
+
+void Timer::resume(void) {
+    if (isrunning)
+        return ;
+    isrunning = true;
+    delay += gettime();
+}
+
+float Timer::end(void) {
+    float got = gettime();
+    if (isrunning)
+        return got - delay;
+    else
+        return - delay;
 }
 
 /* ----------------------------------------------------------------------- */

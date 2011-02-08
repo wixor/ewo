@@ -141,6 +141,10 @@ static void parseMutationPropEq(const char *value) {
 
 /* ------------------------------------------------------------------------ */
 
+static Timer globalEvolutionTmr, globalBuildTmr;
+
+/* ------------------------------------------------------------------------ */
+
 class Data
 {
     static inline char *makeCacheFilename(const char *filename);
@@ -600,7 +604,7 @@ static inline FourFloats vectorSpan(const POIvec &v)
 }
 static inline float vectorSpanScalar(const POIvec &v) {
     FourFloats FF = vectorSpan(v);
-    return Point(FF.xy-FF.xx+1.f,FF.yy-FF.yx+1.f).dist();
+    return Point(FF.xy-FF.xx+1.f,FF.yy-FF.yx+1.f).disteval();
 }
 
 float Population::distance(const Data *base, const POIvec &queryvec, EvaluationJob *EJob)
@@ -667,7 +671,7 @@ float Population::distance(const Data *base, const POIvec &queryvec, EvaluationJ
     /* warning! this is not thread-safe, results may be wrong */
     EJob->uplink->fullsearches += fullsearches;
     EJob->uplink->operations += operations;
-    return sum * exp((float)nzeroSum/nzeroCnt-1.f) / vectorSpanScalar(queryvec);
+    return sum * exp((float)nzeroSum/nzeroCnt-1.f); // vectorSpanScalar(queryvec);
 }
     
 
@@ -705,7 +709,7 @@ void Population::EvaluationJob::runOne(Agent *agent)
             std::max(d3, 1.f/d3));
         if (DEBUG)
             debug("0 0 -> %.2f %.2f, 0 1 -> %.2f %.2f, 1 0 -> %.2f %.2f. dists: %.3f %.3f %.3f", p.x, p.y, r.x, r.y, q.x, q.y, d1, d2, d3);
-        if(ratioExtrem > 1.5f || scaleExtrem > 2.0f) {
+        if(ratioExtrem > 1.5f || scaleExtrem > 4.0f) {
             // warn("agent has too high ratio or scale: %.3f %.3f\n", ratioExtrem, scaleExtrem);
             agent->target = -INF;
             return;
@@ -889,10 +893,12 @@ bool Population::terminationCondition() const
 /* --- the so called main loop */
 Agent Population::evolve()
 {
+    globalEvolutionTmr.resume();
     pop.resize(cfgPopulationSize);
     for(int i=0; i<(int)pop.size(); i++)
         makeRandom(&pop[i]);
-
+    globalEvolutionTmr.pause();
+    
     bestDS.lock(); bestDS.known = known; bestDS.alien = alien; bestDS.unlock();
     
     Agent bestEver;
@@ -905,6 +911,7 @@ Agent Population::evolve()
     totalEvolutionTime.start();
     float ctime = .0f;
     
+    globalEvolutionTmr.resume();
     for(generationNumber = 1; ; generationNumber++)
     {
         debug("start generation %d", generationNumber);
@@ -948,7 +955,7 @@ Agent Population::evolve()
                 do ri = roulette(survivors); while (ri == qi || ri == pi);
                 deMating(&pop[i], &pop[pi], &pop[qi], &pop[ri]);
             } else
-                pop[i] = pop[roulette(survivors)];
+                pop[i] = pop[rand()%survivors]; /*CHANGE*/
             
         // debug("  DE mating time: %.5f", totalEvolutionTime.end()-ctime); ctime = totalEvolutionTime.end();
         
@@ -962,7 +969,8 @@ Agent Population::evolve()
 
     debug("total evolution time: %.3f seconds", totalEvolutionTime.end());
     // sleep(5);
-
+    globalEvolutionTmr.pause();
+    
     bestDS.lock(); bestDS.known = bestDS.alien = NULL; bestDS.ms.clear(); bestDS.unlock();
 
     {
@@ -1077,28 +1085,37 @@ int main(int argc, char *argv[])
     proxDS.activate();
     bestDS.bind();
     
+    globalEvolutionTmr.start();
+    globalEvolutionTmr.pause();
+    
     /* read alien image */
+    globalBuildTmr.start();
     Data alien = Data::build(argv[1], true); /*setting up tabu scale! */
+    globalBuildTmr.pause();
+    
     alienDS.set(alien.raw_ci, alien.sparse);
     proxDS.set(alien.prox_ci, alien.sparse);
-
     /* examine all known images */
     std::vector<std::pair<float, const char *> > results;    
     for(int i=0; i<(int)knownPaths.size(); i++)
     {
         const char *knownPath = knownPaths[i].c_str();
         okay("processing '%s'", knownPath);
-
+        
+        globalBuildTmr.resume();
         Data known = Data::build(knownPath);
+        globalBuildTmr.pause();
         knownDS.set(known.raw_ci, known.dense);
-
+        
         Agent best = Population(&known, &alien).evolve();
         results.push_back(std::make_pair(best.target, knownPath));
         info("best score was %f", best.target);
 
         knownDS.clear();
     }
-
+    
+    printf("global build time = %.5f\nglobal evolution time = %.5f\n", globalBuildTmr.end(), globalEvolutionTmr.end());
+    
     /* print out the verdict */
     std::sort(results.begin(), results.end());
     printf("\n>> the verdict <<\n");

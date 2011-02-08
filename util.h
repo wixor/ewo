@@ -104,7 +104,7 @@ struct Point
     inline float distsq() const { return x*x + y*y; }
     inline float dist() const { return sqrtf(distsq()); }
     /* distance used in evaluation */
-    inline float disteval() const { float a = distsq(); return a*a*a; }
+    inline float disteval() const { float a = dist(); return sqrtf(a)*a; }
 
     inline bool operator<(const Point &p) const {
         return x != p.x ? x < p.x : y < p.y;
@@ -246,10 +246,21 @@ public:
 
 class Timer {
     struct timespec ts;
+    bool isrunning;
+    /* when running, delay is a total pause time
+     * when paused, delay is total pause time - last pause time */
+    float delay;
     int clock;
+    /* real time from the start till now */
+    float gettime();
 public:
-    Timer(int clock = CLOCK_THREAD_CPUTIME_ID) : clock(clock) { }
+    inline Timer(int clock = CLOCK_THREAD_CPUTIME_ID) : clock(clock) {
+        isrunning = false;
+    }
     void start();
+    void pause();
+    void resume();
+    /* gets real time from start till now - total pause time */
     float end();
 };
 
