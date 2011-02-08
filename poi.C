@@ -225,6 +225,9 @@ POIvec extractPOIs(const Array2D<float> &eval, float threshold)
     return all;
 }
 
+static inline bool tmpOper(const std::pair<POI,int> &p1, const std::pair<POI,int> &p2) {
+    return POIlessX(p1.first, p2.first);
+}
 POIvec filterPOIs(const POIvec &all, int count, float tabuScale, const Matrix &M)
 {
     float minx = 1000000000, maxx = -1000000000,
@@ -267,17 +270,17 @@ POIvec filterPOIs(const POIvec &all, int count, float tabuScale, const Matrix &M
     return selected;
 }
 
-POIvec filterPOIs(const POIvec &all, int count)
+POIvec filterPOIs(const POIvec &all, int count, float *foundTabu /*= NULL*/)
 {
-    float downval = 1.f, upval = 3000.0f;
+    float downval = 1.f, upval = 7000.0f, midval;
 
     Matrix id;
     POIvec selected;
 
-    while(upval-downval > 10.f)
+    while(upval-downval > 2.f)
     {
-        float midval = .5f*(upval+downval);
-        selected = filterPOIs(all, count * 4 / 3, midval, id);
+        midval = .5f*(upval+downval);
+        selected = filterPOIs(all, all.size() /* *4/3 ???*/, midval, id);
 
         if((int)selected.size() == count)
             break;
@@ -287,7 +290,10 @@ POIvec filterPOIs(const POIvec &all, int count)
         else
             upval = midval;
     }
-
+    
+    if (foundTabu)
+        *foundTabu = midval;
+    
     return selected;
 }
 

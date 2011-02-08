@@ -111,6 +111,21 @@ struct Point
 
 /* -------------------------------------------------------------------------- */
 
+struct FourFloats
+{
+    float xx,xy,yx,yy;
+    inline FourFloats() {}
+    inline FourFloats(float a, float b, float c, float d) {
+        xx=a, xy=b, yx=c, yy=d;
+    }
+    inline bool inside(Point p) {
+        return p.x >= xx && p.x <= xy && p.y >= yx && p.y <= yy;
+    }
+};
+
+
+/* -------------------------------------------------------------------------- */
+
 class Matrix
 {
     /* the matrix:

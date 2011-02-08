@@ -26,13 +26,17 @@ inline POI operator*(const Matrix &M, const POI &p) {
     return POI(M * (Point)p, p.val);
 }
 
+inline bool POIlessX(const POI &p1, const POI &p2) {
+    return p1.x != p2.x ? p1.x < p2.x : p1.y < p2.y; 
+}
+
 typedef std::vector<POI> POIvec;
 
 Array2D<float> evaluateImage(const Image &src, const std::vector<float> &scales, int steps);
 Image visualizeEvaluation(const Array2D<float> &eval);
 POIvec extractPOIs(const Array2D<float> &eval, float threshold);
 POIvec filterPOIs(const POIvec &all, int count, float tabuScale, const Matrix &M);
-POIvec filterPOIs(const POIvec &all, int count);
+POIvec filterPOIs(const POIvec &all, int count, float *foundTabu = NULL);
 
 /* ----------------------------------------------------------------------- */
 

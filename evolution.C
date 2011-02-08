@@ -7,6 +7,7 @@
 #include <locale.h>
 #include <sys/stat.h>
 #include <vector>
+#include <bitset>
 #include <string>
 #include <algorithm>
 #include <stdexcept>
@@ -17,10 +18,14 @@
 #include "image.h"
 #include "config.h"
 
+#define INF 1e+6f
+
 /* ------------------------------------------------------------------------ */
 
 static void parsePOIScales(const char *value);
 static void parseSurvivalEq(const char *value);
+static void parseMutationDevEq(const char *value);
+static void parseMutationPropEq(const char *value);
 
 static int cfgThreads;
 static int cfgPOISteps;
@@ -28,10 +33,13 @@ static std::vector<float> cfgPOIScales;
 static float cfgPOIThreshold;
 static float cfgPOITabuScale;
 static int cfgPOICount;
+static int cfgPOISparseCount;
 static int cfgProxMapDetail, cfgProxMapEntries;
 static int cfgMinPois;
 static int cfgPopulationSize;
 static std::vector<float> cfgSurvivalEq;
+static std::vector<float> cfgMutationDevEq;
+static std::vector<float> cfgMutationPropEq;
 static int cfgStopCondParam, cfgMaxGenerations;
 static float cfgTranslateInit, cfgRotateInit, cfgScaleInit;
 static float cfgTranslateProp,  cfgRotateProp,  cfgScaleProp, cfgFlipProp;
@@ -47,6 +55,7 @@ static struct config_var cfgvars[] = {
     { "poiSteps",       config_var::INT,       &cfgPOISteps },
     { "poiScales",      config_var::CALLBACK,  (void *)&parsePOIScales },
     { "poiCount",       config_var::INT,       &cfgPOICount },
+    { "poiSparseCount", config_var::INT,       &cfgPOISparseCount },
     { "poiThreshold",   config_var::FLOAT,     &cfgPOIThreshold },
     { "poiTabuScale",   config_var::FLOAT,     &cfgPOITabuScale },
     { "proxMapDetail",  config_var::INT,       &cfgProxMapDetail },
@@ -54,9 +63,12 @@ static struct config_var cfgvars[] = {
     { "minPois",        config_var::INT,       &cfgMinPois },
     /* evolution */
     { "populationSize", config_var::INT,       &cfgPopulationSize },
-    { "survivalEq",     config_var::CALLBACK,  (void *)&parseSurvivalEq },
     { "stopCondParam",  config_var::INT,       &cfgStopCondParam },
     { "maxGenerations", config_var::INT,       &cfgMaxGenerations },
+    /* varying evolution parameters */
+    { "survivalEq",     config_var::CALLBACK,  (void *)&parseSurvivalEq },
+    { "mutationDevEq",  config_var::CALLBACK,  (void *)&parseMutationDevEq },
+    { "mutationPropEq", config_var::CALLBACK,  (void *)&parseMutationPropEq },
     /* initial population generation parameters */
     { "translateInit",  config_var::FLOAT,     &cfgTranslateInit },
     { "rotateInit",     config_var::FLOAT,     &cfgRotateInit },
@@ -106,11 +118,25 @@ static std::vector<float> parseFloatVector(const char *value)
     return ret;
 }
 
+static float eval(float x, std::vector<float> polyn)
+{
+    float v = 0;
+    for(int i=0; i<(int)polyn.size(); i++)
+        v = x*v + polyn[i];
+    return v;
+}
+
 static void parsePOIScales(const char *value) {
     cfgPOIScales = parseFloatVector(value);
 }
 static void parseSurvivalEq(const char *value) {
     cfgSurvivalEq = parseFloatVector(value);
+}
+static void parseMutationDevEq(const char *value) {
+    cfgMutationDevEq = parseFloatVector(value);
+}
+static void parseMutationPropEq(const char *value) {
+    cfgMutationPropEq = parseFloatVector(value);
 }
 
 /* ------------------------------------------------------------------------ */
@@ -123,7 +149,7 @@ class Data
     inline void writeCache(const char *filename) const;
 
     struct cacheHdr {
-        enum { MAGIC = 0xc9981adf };
+        enum { MAGIC = 0xc9981ad4 };
         uint32_t magic;
         uint32_t checksum;
         uint32_t poiCount;
@@ -131,7 +157,7 @@ class Data
     };
 
     inline Data() { }
-    void doBuild(const char *filename);
+    void doBuild(const char *filename, bool setTabuScale);
 
 public:
     Image raw;
@@ -141,14 +167,14 @@ public:
     CairoImage raw_ci; /* image for gui */
     CairoImage prox_ci; /* visualization of proximity data */
 
-    static inline Data build(const char *filename) {
+    static inline Data build(const char *filename, bool setTabuScale = false) {
         Data ret;
-        ret.doBuild(filename);
+        ret.doBuild(filename, setTabuScale);
         return ret;
     }
 };
 
-void Data::doBuild(const char *filename)
+void Data::doBuild(const char *filename, bool setTabuScale /*= false*/)
 {
     gui_status("loading '%s'", filename);
 
@@ -156,21 +182,39 @@ void Data::doBuild(const char *filename)
 
     try {
         readCached(filename);
-        sparse = filterPOIs(dense, cfgPOICount, cfgPOITabuScale, Matrix());
+        if (setTabuScale) {
+            float foundTabu = -1.0f;
+            sparse = filterPOIs(dense, cfgPOISparseCount, &foundTabu);
+            debug("sparse size. desired: %d, got: %d, setting tabu as %.3f\n", cfgPOISparseCount, sparse.size(), foundTabu);
+            cfgPOITabuScale = foundTabu;
+        }
+        else
+            sparse = filterPOIs(dense, cfgPOICount, cfgPOITabuScale, Matrix());
     }
     catch(std::exception &e)
     {
         warn("failed to read cache: %s", e.what());
 
         {
+            /* POI finding */
             gui_status("loading '%s': looking for POIs", filename);
             Array2D<float> eval = evaluateImage(raw, cfgPOIScales, cfgPOISteps);
             POIvec all = extractPOIs(eval, cfgPOIThreshold);
             dense = filterPOIs(all, cfgPOICount);
-            sparse = filterPOIs(dense, cfgPOICount, cfgPOITabuScale, Matrix());
+            if (setTabuScale) {
+                float foundTabu = -1.0f;
+                sparse = filterPOIs(dense, cfgPOISparseCount, &foundTabu);
+                debug("sparse size. desired: %d, got: %d, setting tabu as %.3f\n", cfgPOISparseCount, sparse.size(), foundTabu);
+                cfgPOITabuScale = foundTabu;
+                POIvec sparse2 = filterPOIs(dense, cfgPOICount, cfgPOITabuScale, Matrix());
+                debug("sparse sizes: %d vs %d\n", sparse.size(), sparse2.size());
+            }
+            else
+                sparse = filterPOIs(dense, cfgPOICount, cfgPOITabuScale, Matrix());
         }
     
         {
+            /* build proximity map */
             gui_status("loading '%s': building proximity map", filename);
             prox.resize(raw.getWidth(), raw.getHeight(),
                         cfgProxMapDetail, cfgProxMapEntries);
@@ -178,6 +222,7 @@ void Data::doBuild(const char *filename)
         }
     
         {
+            /* find origin */
             int n = dense.size();
             float v[n];
             
@@ -215,7 +260,8 @@ uint32_t Data::checksum() const
            (cfgPOICount*100000007) ^
            (cfgProxMapDetail*43066337) ^
            (cfgProxMapEntries*59284223);
-    ret ^= float2u32(cfgPOIThreshold);
+    ret ^= float2u32(cfgPOIThreshold) ^
+           float2u32(cfgPOITabuScale);
     for(int i=0; i<(int)cfgPOIScales.size(); i++)
         ret ^= float2u32(cfgPOIScales[i]);
     return ret;
@@ -358,6 +404,7 @@ public:
     const Data *known, *alien;
     rgba knownColor, alienColor, silhouetteColor;
     std::vector<Matrix> ms;
+    std::bitset<256> mask;
 
     inline FitDisplaySlot(const char *name) : DisplaySlot(name) 
     {
@@ -383,7 +430,18 @@ public:
 
         drawSilhouettes(ms, known->raw.getWidth(), known->raw.getHeight(), silhouetteColor);
         
-        std::vector<Point> ps(alien->sparse.begin(), alien->sparse.end());
+        std::vector<Point> ps, psnon;
+        for (int i=0; i<(int)alien->sparse.size(); i++) {
+            if (mask[i])
+                ps.push_back(alien->sparse[i]);
+            else
+                psnon.push_back(alien->sparse[i]);
+        }
+        drawDots(ps, 6, alienColor);
+        drawDots(psnon, 6, silhouetteColor);
+            
+        
+        (alien->sparse.begin(), alien->sparse.end());
         drawDots(ps, 6, alienColor);
 
         POIvec knownsparse = filterPOIs(known->dense, cfgPOICount, cfgPOITabuScale, ms[0]);
@@ -412,6 +470,7 @@ public:
     float target; /* target function */
     float fitness; /* population-wide fitness factor */
 
+    /*TEST*/std::bitset<256> mask;
     /* agents ordering */
     inline bool operator<(const Agent &A) const {
         return fitness > A.fitness;
@@ -485,8 +544,11 @@ class Population
         virtual void run();
 
     };
+    
+    static float distance(const Data *base, const POIvec &queryvec, EvaluationJob *EJob);
+    
     inline void evaluate();
-    int fullsearches;
+    int fullsearches, operations;
 
     /* roulette selection */
     int roulette(int n);
@@ -500,7 +562,13 @@ class Population
     inline bool terminationCondition() const;
 
     /* how many specimen will advance to the next generation */
-    float getSurvivalRate() const;
+    inline float getSurvivalRate() const {return eval((generationNumber-1) / (cfgMaxGenerations-1), cfgSurvivalEq); }
+    
+    /* mutation deviation scaling */
+    inline float getMutationDev() const { return eval((generationNumber-1) / (cfgMaxGenerations-1), cfgMutationDevEq); }
+    
+    /* mutation probability scaling */
+    inline float getMutationProp() const { return eval((generationNumber-1) / (cfgMaxGenerations-1), cfgMutationPropEq); }
 
 public:
     Population(const Data *known, const Data *alien);
@@ -517,54 +585,50 @@ void Population::EvaluationJob::run()
     for(int i=start; i<end; i++)
         runOne(&uplink->pop[i]);
 }
-void Population::EvaluationJob::runOne(Agent *agent)
+/* auxillary functions for runOne */
+static inline float max3(float a, float b, float c) { return std::max(std::max(a,b),c); }
+static inline FourFloats vectorSpan(const POIvec &v)
 {
-    const Data *alien = uplink->alien, *known = uplink->known;
+    float minx=INF,miny=INF,maxx=-INF,maxy=-INF;
+    for (int i=0; i<(int)v.size(); i++) {
+        minx = std::min(minx, v[i].x);
+        maxx = std::max(maxx, v[i].x);
+        miny = std::min(miny, v[i].y);
+        maxy = std::max(maxy, v[i].y);
+    }
+    return FourFloats(minx,maxx,miny,maxy);
+}
+static inline float vectorSpanScalar(const POIvec &v) {
+    FourFloats FF = vectorSpan(v);
+    return Point(FF.xy-FF.xx+1.f,FF.yy-FF.yx+1.f).dist();
+}
 
-    /* for each POI from known image [--- TODO: update ---]
-     * we look for closest POI from alien image. moreover, each alien
-     * POI can be used at most K times (this is to prevent matching
-     * all known POIs with one or two alien POIs). */
-    const char K = 2;
-    char cnts[alien->sparse.size()]; /* here we count each use of an alien poi */
+float Population::distance(const Data *base, const POIvec &queryvec, EvaluationJob *EJob)
+{
+    if (queryvec.empty())
+        return 0;
+    const char K = 100;
+    char cnts[base->sparse.size()]; /* here we count each use of an alien poi */
     memset(cnts, 0, sizeof(cnts));
-
-    {
-        Point p = agent->M * Point(0,0),
-              q = agent->M * Point(1,0),
-              r = agent->M * Point(1,1);
-        float sprop = (p-q).dist() / (q-r).dist();
-        if(sprop > 1.5f || sprop < 0.6f) {
-            agent->target = -1e+10;
-            return;
-        }
-    }
-        
-    POIvec knownsparse = filterPOIs(known->dense, cfgPOICount, cfgPOITabuScale, agent->M);
-    if((int)knownsparse.size() < cfgMinPois) {
-        //warn("too little pois found: %d", knownsparse.size());
-        agent->target = -1e+10;
-        return;
-    }
-//    debug("d=(%f,%f) s=(%f,%f) a=%f, pois=%d", agent->dx(),agent->dy(),agent->sx(),agent->sy(),agent->alpha()/M_PI*180.,knownsparse.size());
-
-    int fullsearches = 0;
+    
+    int fullsearches = 0, operations = 0;
     float sum = 0;
-    for(int i=0; i<(int)knownsparse.size(); i++)
+    for(int i=0; i<(int)queryvec.size(); i++)
     {
         /* the point we're looking for.
          * because ProximityMap cannot look beyond its own dimensions,
          * we need to clamp point's coordinates to lay within. */
-        Point p = knownsparse[i];
-        p.x = std::min(std::max(p.x, 0.f), alien->prox.getWidth()-1.f);
-        p.y = std::min(std::max(p.y, 0.f), alien->prox.getHeight()-1.f);
+        Point p = queryvec[i];
+        p.x = std::min(std::max(p.x, 0.f), base->prox.getWidth()-1.f);
+        p.y = std::min(std::max(p.y, 0.f), base->prox.getHeight()-1.f);
 
         /* first try looking the point up using ProximityArray.
          * this will succeed very often (well, depending of number of 
          * entries in the array) */
         int bestidx = -1;
-        for(int j=0; j<alien->prox.getEntries(); j++) {
-            int idx = alien->prox.at(p.x, p.y)[j];
+        for(int j=0; j<base->prox.getEntries(); j++) {
+            int idx = base->prox.at(p.x, p.y)[j];
+            operations ++;
             if(cnts[idx] < K) {
                 bestidx = idx;
                 break;
@@ -574,10 +638,11 @@ void Population::EvaluationJob::runOne(Agent *agent)
         /* if ProximityArray failed, run the full search */
         if(bestidx == -1) {
             fullsearches++;
-            float bestdist = 1e+10f;
-            for(int j=0; j<(int)alien->sparse.size(); j++)
+            float bestdist = INF;
+            for(int j=0; j<(int)base->sparse.size(); j++)
             {
-                float dist = (p - alien->sparse[j]).dist();
+                operations ++;
+                float dist = (p - base->sparse[j]).dist();
                 if(cnts[j] < K && dist < bestdist) {
                     bestdist = dist;
                     bestidx = j;
@@ -587,17 +652,105 @@ void Population::EvaluationJob::runOne(Agent *agent)
 
         if(bestidx == -1) {
             //warn("cannot match poi %f,%f", p.x, p.y);
-            sum += 1e+10f;
+            sum += INF;
         } else {
             cnts[bestidx] ++;
-            sum += (p - alien->sparse[bestidx]).distsq();
+            sum += (p - base->sparse[bestidx]).distsq();
         }
     }
-
+    int nzeroSum = 0, nzeroCnt = 0;
+    for (int i=0; i<(int)base->sparse.size(); i++)
+        if (cnts[i])
+            nzeroCnt ++,
+            nzeroSum += cnts[i];
+    
     /* warning! this is not thread-safe, results may be wrong */
-    uplink->fullsearches += fullsearches;
+    EJob->uplink->fullsearches += fullsearches;
+    EJob->uplink->operations += operations;
+    return sum * exp((float)nzeroSum/nzeroCnt-1.f) / vectorSpanScalar(queryvec);
+}
+    
 
-    agent->target = -sum / knownsparse.size();
+void Population::EvaluationJob::runOne(Agent *agent)
+{
+#define DEBUG false
+    const Data *alien = uplink->alien, *known = uplink->known;
+
+    /* for each POI from known image [--- TODO: update ---]
+     * we look for closest POI from alien image. moreover, each alien
+     * POI can be used at most K times (this is to prevent matching
+     * all known POIs with one or two alien POIs). */
+
+    //{
+        /* p ------- q
+         * |       /
+         * |     /
+         * |   /
+         * | /
+         * r           */
+        /* attempt to cut out too "flattening" agents AND too "resizing" ones */
+        Point p = agent->M * Point(0,0),
+              q = agent->M * Point(1,0),
+              r = agent->M * Point(0,1);
+        float d1 = (p-q).dist(),
+              d2 = (p-r).dist(),
+              d3 = (q-r).dist() / 1.41f;
+        float ratioExtrem = max3(
+            std::max(d1/d2, d2/d1),
+            std::max(d1/d3, d3/d1),
+            std::max(d2/d3, d3/d2));
+        float scaleExtrem = max3(
+            std::max(d1, 1.f/d1),
+            std::max(d2, 1.f/d2),
+            std::max(d3, 1.f/d3));
+        if (DEBUG)
+            debug("0 0 -> %.2f %.2f, 0 1 -> %.2f %.2f, 1 0 -> %.2f %.2f. dists: %.3f %.3f %.3f", p.x, p.y, r.x, r.y, q.x, q.y, d1, d2, d3);
+        if(ratioExtrem > 1.5f || scaleExtrem > 2.0f) {
+            // warn("agent has too high ratio or scale: %.3f %.3f\n", ratioExtrem, scaleExtrem);
+            agent->target = -INF;
+            return;
+        }
+    //}
+        
+    POIvec knownsparse = filterPOIs(known->dense, cfgPOICount, cfgPOITabuScale, agent->M);
+    if((int)knownsparse.size() < cfgMinPois) {
+        //warn("too little pois found: %d", knownsparse.size());
+        agent->target = -INF;
+        return ;
+    }
+    
+    agent->mask.reset();
+    FourFloats FF = vectorSpan(knownsparse);
+    Matrix revM = agent->M.inverse();
+    POIvec activealien;
+    for (int i=0; i<(int)alien->sparse.size(); i++) {
+        POI p = revM * alien->sparse[i];
+        if (FF.inside(p)) {
+            activealien.push_back(p);
+            agent->mask.set(i);
+        }
+    }
+    
+    /* how about the penalty for too greedy matching ?? 
+     * basically, there are a few solutions:
+        * set an upper bound for number of known pois matched to one alien point <- dont' think good idea
+        * introduce a penalty for "too flattening" matrices <- doesn't work in my opinion 
+        * introduce a penalty for too high average of matched points */
+    /* no, no, no, doesn't work! the problem is somewhere else and, unfortunately, i know where */
+    
+    float dist1 = distance(alien, knownsparse, this),
+          dist2 = distance(known, activealien, this);
+          
+    if (DEBUG)
+        debug("d=(%.2f,%.2f) s=(%.2f,%.2f) a=%.2f, pois=%d. rextrem = %.2f, sextrem = %.2f. res=%.3f, span=%.2f\n", 
+          agent->dx(),agent->dy(),agent->sx(),agent->sy(),agent->alpha()/M_PI*180.,knownsparse.size(),ratioExtrem,scaleExtrem,dist1,
+          vectorSpanScalar(knownsparse)
+         );
+    
+    // debug("%.2f (%.3f) %.2f (%.3f)\n", dist1, dist1/knownsparse.size(), dist2, dist2/activealien.size());
+    agent->target = -(dist1/* + dist2*/) / (knownsparse.size() /*+ activealien.size()*/);
+    agent->target = std::max(agent->target, -INF);
+    
 }
 void Population::evaluate()
 {
@@ -613,19 +766,26 @@ void Population::evaluate()
         jobs[i].end = std::min((int)pop.size(), evalBatch*(i+1));
     }
 
-    fullsearches = 0;
+    fullsearches = operations = 0;
     for(int i=0; i<nJobs; i++)
         aq->queue(&jobs[i]);
     c.wait();
-    debug("did at least %d fullsearches", fullsearches);
+    debug("  did at least %d fullsearches and %d operations", fullsearches, operations);
 
-    float minTarget = 1e+30;
-    for(int i=0; i<(int)pop.size(); i++)
+    float minTarget = INF;
+    for(int i=0; i<(int)pop.size(); i++) {
+        // debug("%d -> %.3f", i, pop[i].target);
         minTarget = std::min(minTarget, pop[i].target);
+    }
+    
+    // debug("min target = %.3f", minTarget);
 
     float denominator = 0;
     for(int i=0; i<(int)pop.size(); i++)
         denominator += pop[i].target - minTarget;
+    
+    // debug("denominator = %.5f", denominator);
+    
     assert(denominator > 1e-5);
     denominator = 1.f/denominator;
 
@@ -669,27 +829,30 @@ void Population::mutation(Agent *a)
 {
     float w = known->raw.getWidth(),
           h = known->raw.getHeight();
+          
+    float sdev = getMutationDev(); /* mutation deviation scale */
+    float pdev = getMutationProp();
+    
+    if(Random::maybe(cfgTranslateProp*pdev))
+        a->translate(Random::trigauss(0, cfgTranslateDev * sdev, cfgTranslateMean2, cfgTranslateDev2 * sdev) * w,
+                     Random::trigauss(0, cfgTranslateDev * sdev, cfgTranslateMean2, cfgTranslateDev2 * sdev) * h);
 
-    if(Random::maybe(cfgTranslateProp))
-        a->translate(Random::trigauss(0, cfgTranslateDev, cfgTranslateMean2, cfgTranslateDev2) * w,
-                     Random::trigauss(0, cfgTranslateDev, cfgTranslateMean2, cfgTranslateDev2) * h);
+    if(Random::maybe(cfgRotateProp*pdev))
+        a->rotate(Random::trigauss(0, cfgRotateDev * sdev, cfgRotateMean2, cfgRotateDev2 * sdev),
+                  Random::gaussian(known->originX, cfgOriginDev * w * sdev),
+                  Random::gaussian(known->originY, cfgOriginDev * h * sdev));
 
-    if(Random::maybe(cfgRotateProp))
-        a->rotate(Random::trigauss(0, cfgRotateDev, cfgRotateMean2, cfgRotateDev2),
-                  Random::gaussian(known->originX, cfgOriginDev * w),
-                  Random::gaussian(known->originY, cfgOriginDev * h));
+    if(Random::maybe(cfgScaleProp*pdev))
+        a->scale(Random::trigauss(1, cfgScaleDev * sdev, cfgScaleMean2, cfgScaleDev2 * sdev),
+                 Random::trigauss(1, cfgScaleDev * sdev, cfgScaleMean2, cfgScaleDev2 * sdev),
+                 Random::gaussian(known->originX, cfgOriginDev * w * sdev),
+                 Random::gaussian(known->originY, cfgOriginDev * h * sdev));
 
-    if(Random::maybe(cfgScaleProp))
-        a->scale(Random::trigauss(1, cfgScaleDev, cfgScaleMean2, cfgScaleDev2),
-                 Random::trigauss(1, cfgScaleDev, cfgScaleMean2, cfgScaleDev2),
-                 Random::gaussian(known->originX, cfgOriginDev * w),
-                 Random::gaussian(known->originY, cfgOriginDev * h));
-
-    if(Random::maybe(cfgFlipProp))
+    if(Random::maybe(cfgFlipProp*pdev))
     {
         float rangle = Random::real(2.f*M_PI),
-              rx = Random::gaussian(known->originX, cfgOriginDev*w),
-              ry = Random::gaussian(known->originY, cfgOriginDev*h);
+              rx = Random::gaussian(known->originX, cfgOriginDev*w * sdev),
+              ry = Random::gaussian(known->originY, cfgOriginDev*h * sdev);
         
         a->rotate(rangle, rx, ry);
         a->scale(-1, 1, rx, ry);
@@ -722,16 +885,6 @@ bool Population::terminationCondition() const
 
     return max2 >= max1;
 }
-
-/* how many specimen will make it to the next round */
-float Population::getSurvivalRate() const
-{
-    float v = 0, x = (float) (generationNumber-1) / (cfgMaxGenerations-1);
-    for(int i=0; i<(int)cfgSurvivalEq.size(); i++)
-        v = x*v + cfgSurvivalEq[i];
-    assert(v >= 0 && v <= 1);
-    return v;
-}
     
 /* --- the so called main loop */
 Agent Population::evolve()
@@ -750,10 +903,15 @@ Agent Population::evolve()
 
     Timer totalEvolutionTime(CLOCK_PROCESS_CPUTIME_ID);
     totalEvolutionTime.start();
-
+    float ctime = .0f;
+    
     for(generationNumber = 1; ; generationNumber++)
     {
+        debug("start generation %d", generationNumber);
+        
         evaluate();
+        debug("  evaluation time: %.5f", totalEvolutionTime.end()-ctime); ctime = totalEvolutionTime.end();
+        
 
         float survivalRate = getSurvivalRate();
 
@@ -766,8 +924,11 @@ Agent Population::evolve()
         bestDS.ms.clear();
         for(int i=0; i<(int)pop.size(); i+=std::max(1, (int)pop.size()/30))
             bestDS.ms.push_back(pop[i].M);
+        bestDS.mask = pop[0].mask;
         bestDS.unlock();
-
+        
+        // debug("  drawing time: %.5f", totalEvolutionTime.end()-ctime); ctime = totalEvolutionTime.end();
+        
         bestScores.push_back(pop[0].target);
         if (bestEver.target < pop[0].target)
             bestEver = pop[0];
@@ -788,15 +949,19 @@ Agent Population::evolve()
                 deMating(&pop[i], &pop[pi], &pop[qi], &pop[ri]);
             } else
                 pop[i] = pop[roulette(survivors)];
-
+            
+        // debug("  DE mating time: %.5f", totalEvolutionTime.end()-ctime); ctime = totalEvolutionTime.end();
+        
         for(int i=0; i<(int)pop.size(); i++)
             mutation(&pop[i]);
+        
+        debug("  evolution operations time: %.5f", totalEvolutionTime.end()-ctime); ctime = totalEvolutionTime.end();
         
         if(terminationCondition()) break;
     }
 
     debug("total evolution time: %.3f seconds", totalEvolutionTime.end());
-    sleep(5);
+    // sleep(5);
 
     bestDS.lock(); bestDS.known = bestDS.alien = NULL; bestDS.ms.clear(); bestDS.unlock();
 
@@ -913,7 +1078,7 @@ int main(int argc, char *argv[])
     bestDS.bind();
     
     /* read alien image */
-    Data alien = Data::build(argv[1]);
+    Data alien = Data::build(argv[1], true); /*setting up tabu scale! */
     alienDS.set(alien.raw_ci, alien.sparse);
     proxDS.set(alien.prox_ci, alien.sparse);
 
