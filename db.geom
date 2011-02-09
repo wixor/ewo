@@ -4,3 +4,7 @@ geom/circle.png
 geom/triangle1.png
 geom/5star.png
 geom/4star.png
+geom/balls.png
+geom/arch.png
+geom/clover.png
+geom/house.png

@@ -104,7 +104,7 @@ struct Point
     inline float distsq() const { return x*x + y*y; }
     inline float dist() const { return sqrtf(distsq()); }
     /* distance used in evaluation */
-    inline float disteval() const { float a = dist(); return sqrtf(a)*a; }
+    inline float disteval(float param = 0.0f) const { float a = dist(); return (param < 1e-3 || a < param) ? a : a*a*a / param*param; }
 
     inline bool operator<(const Point &p) const {
         return x != p.x ? x < p.x : y < p.y;

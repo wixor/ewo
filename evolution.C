@@ -118,7 +118,7 @@ static std::vector<float> parseFloatVector(const char *value)
     return ret;
 }
 
-static float eval(float x, std::vector<float> polyn)
+static float eval(float x, const std::vector<float> &polyn)
 {
     float v = 0;
     for(int i=0; i<(int)polyn.size(); i++)
@@ -590,7 +590,7 @@ void Population::EvaluationJob::run()
         runOne(&uplink->pop[i]);
 }
 /* auxillary functions for runOne */
-static inline float max3(float a, float b, float c) { return std::max(std::max(a,b),c); }
+static inline float max4(float a, float b, float c, float d) { return std::max(std::max(a,b),std::max(c,d)); }
 static inline FourFloats vectorSpan(const POIvec &v)
 {
     float minx=INF,miny=INF,maxx=-INF,maxy=-INF;
@@ -617,6 +617,24 @@ float Population::distance(const Data *base, const POIvec &queryvec, EvaluationJ
     
     int fullsearches = 0, operations = 0;
     float sum = 0;
+    
+    float qspan = 0;
+    {
+        const int TRIES = 20;
+        for (int t=0; t<TRIES; t++) 
+        {
+            int ind = rand()%queryvec.size();
+            float mindist = INF*INF;
+            for (int i=0; i<(int)queryvec.size(); i++)
+                if (i != ind)
+                    mindist = std::min(mindist, (queryvec[ind]-queryvec[i]).distsq());
+            mindist = sqrtf(mindist);
+            qspan += mindist/TRIES;
+        }
+        //debug("qspan = %.4f\n", qspan);
+        assert(qspan > 1e-5);
+    }
+    
     for(int i=0; i<(int)queryvec.size(); i++)
     {
         /* the point we're looking for.
@@ -646,7 +664,7 @@ float Population::distance(const Data *base, const POIvec &queryvec, EvaluationJ
             for(int j=0; j<(int)base->sparse.size(); j++)
             {
                 operations ++;
-                float dist = (p - base->sparse[j]).disteval();
+                float dist = (p - base->sparse[j]).distsq();
                 if(cnts[j] < K && dist < bestdist) {
                     bestdist = dist;
                     bestidx = j;
@@ -659,7 +677,7 @@ float Population::distance(const Data *base, const POIvec &queryvec, EvaluationJ
             sum += INF;
         } else {
             cnts[bestidx] ++;
-            sum += (p - base->sparse[bestidx]).disteval();
+            sum += (p - base->sparse[bestidx]).disteval(qspan);
         }
     }
     int nzeroSum = 0, nzeroCnt = 0;
@@ -671,7 +689,7 @@ float Population::distance(const Data *base, const POIvec &queryvec, EvaluationJ
     /* warning! this is not thread-safe, results may be wrong */
     EJob->uplink->fullsearches += fullsearches;
     EJob->uplink->operations += operations;
-    return sum * exp((float)nzeroSum/nzeroCnt-1.f); // vectorSpanScalar(queryvec);
+    return sum * exp((float)nzeroSum/nzeroCnt-1.f) / vectorSpanScalar(queryvec);
 }
     
 
@@ -695,21 +713,25 @@ void Population::EvaluationJob::runOne(Agent *agent)
         /* attempt to cut out too "flattening" agents AND too "resizing" ones */
         Point p = agent->M * Point(0,0),
               q = agent->M * Point(1,0),
-              r = agent->M * Point(0,1);
+              r = agent->M * Point(0,1),
+              s = agent->M * Point(1,1);
         float d1 = (p-q).dist(),
               d2 = (p-r).dist(),
-              d3 = (q-r).dist() / 1.41f;
-        float ratioExtrem = max3(
+              d3 = (q-r).dist() / 1.41f,
+              d4 = (p-s).dist() / 1.41f;
+        float ratioExtrem = max4(
             std::max(d1/d2, d2/d1),
             std::max(d1/d3, d3/d1),
+            std::max(d3/d4, d4/d3),
             std::max(d2/d3, d3/d2));
-        float scaleExtrem = max3(
+        float scaleExtrem = max4(
             std::max(d1, 1.f/d1),
             std::max(d2, 1.f/d2),
+            std::max(d4, 1.f/d4),
             std::max(d3, 1.f/d3));
         if (DEBUG)
             debug("0 0 -> %.2f %.2f, 0 1 -> %.2f %.2f, 1 0 -> %.2f %.2f. dists: %.3f %.3f %.3f", p.x, p.y, r.x, r.y, q.x, q.y, d1, d2, d3);
-        if(ratioExtrem > 1.5f || scaleExtrem > 4.0f) {
+        if(ratioExtrem > 1.5f || scaleExtrem > 3.0f) {
             // warn("agent has too high ratio or scale: %.3f %.3f\n", ratioExtrem, scaleExtrem);
             agent->target = -INF;
             return;
@@ -725,10 +747,10 @@ void Population::EvaluationJob::runOne(Agent *agent)
     
     agent->mask.reset();
     FourFloats FF = vectorSpan(knownsparse);
-    Matrix revM = agent->M.inverse();
+//    Matrix revM = agent->M.inverse();
     POIvec activealien;
     for (int i=0; i<(int)alien->sparse.size(); i++) {
-        POI p = revM * alien->sparse[i];
+        POI p = /*revM **/ alien->sparse[i];
         if (FF.inside(p)) {
             activealien.push_back(p);
             agent->mask.set(i);
@@ -753,6 +775,7 @@ void Population::EvaluationJob::runOne(Agent *agent)
     
     // debug("%.2f (%.3f) %.2f (%.3f)\n", dist1, dist1/knownsparse.size(), dist2, dist2/activealien.size());
     agent->target = -(dist1/* + dist2*/) / (knownsparse.size() /*+ activealien.size()*/);
+    // agent->target = -(dist1 + dist2) / (knownsparse.size() + activealien.size());
     agent->target = std::max(agent->target, -INF);
     
 }

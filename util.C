@@ -16,8 +16,10 @@ void text_progress(float val) {
 float Timer::gettime(void) {
     struct timespec now;
     clock_gettime(clock, &now);
-    if(now.tv_nsec < ts.tv_nsec)
+    if (now.tv_nsec < ts.tv_nsec)
         now.tv_nsec += 1000000000, now.tv_sec -= 1;
+    if (now.tv_sec < ts.tv_sec)
+        now.tv_sec += 60;
     now.tv_nsec -= ts.tv_nsec;
     now.tv_sec -= ts.tv_sec;
     return (float)now.tv_sec + 0.000000001f*now.tv_nsec;
