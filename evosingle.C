@@ -169,7 +169,7 @@ void Data::doBuild(const char *filename)
         writeCache(filename);
     }
 
-    info("loaded '%s': %d dense pois, %d sparse pois", filename, dense.size(), sparse.size());
+    info("loaded '%s': %d dense pois, %d sparse pois", filename, (int)dense.size(), (int)sparse.size());
 
     raw_ci = gui_upload(raw);
     prox_ci = gui_upload(prox.visualize());
@@ -191,11 +191,12 @@ void Data::doBuild(const char *filename)
 
     {
         float sum = 0;
-        int n = sparse.size();
-        for(int i=0; i<n; i++)
-            for(int j=0; j<n; j++)
-                sum += (sparse[i] - sparse[j]).dist();
-        avgpoidist = sum / (n*n);
+        for(int i=0; i<(int)sparse.size(); i++) {
+            /* the second-closest poi, because the first-closesr is us */
+            int j = prox.at(sparse[i].x, sparse[i].y)[1]; 
+            sum += (sparse[i] - sparse[j]).dist();
+        }
+        avgpoidist = sum / sparse.size();
     }
     
 

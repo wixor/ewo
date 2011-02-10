@@ -12,6 +12,7 @@ image.o: CFLAGS += $(shell pkg-config --cflags gdk-pixbuf-2.0)
 gui-gtk.o: CFLAGS += $(shell pkg-config --cflags gtk+-2.0)
 evolution evosingle poi-test gui-example: LDFLAGS += $(shell pkg-config --libs gtk+-2.0)
 
+all: evolution evosingle
 evolution: evolution.o poi.o gui.o gui-gtk.o util.o image.o config.o
 evosingle: evosingle.o poi.o gui.o gui-gtk.o util.o image.o config.o
 poi-test: poi-test.o poi.o image.o util.o gui.o gui-gtk.o

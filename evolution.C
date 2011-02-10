@@ -231,7 +231,7 @@ void Data::doBuild(const char *filename, bool setTabuScale /*= false*/)
         }
     }
         
-    info("loaded '%s': %d dense pois, %d sparse pois", filename, dense.size(), sparse.size());
+    info("loaded '%s': %d dense pois, %d sparse pois", filename, (int)dense.size(), (int)sparse.size());
 
     raw_ci = gui_upload(raw);
     prox_ci = gui_upload(prox.visualize());
