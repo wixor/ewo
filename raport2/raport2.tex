@@ -97,15 +97,20 @@ W programie rozpoznającym mozaiki badany jest zbiór liczb naturalnych oznaczaj
 $W$ niezerowych elementów tego zbioru. Następnie średnia obliczona średnia odległość mnożona jest odległość przez $e^{W-1}$. W ten sposób karane są
 osobniki próbujące dopasować kilka swoich POI do jednego.
 
-\paragraph{przeszkoda 2: małe jest lepsze}
-Dość intuicyjnym faktem jest to, że osobniki, których przekształcenie mocniej ściska obrazek, okazują się być średnio lepsze. Wynika to stąd, że im mniejszy obrazek, 
-tym łatwiej dopasować go (całkowicie błędnie) do fragmentu czegoś dużego. 
+\paragraph{Przeszkoda 2: małe jest lepsze}
+Dość intuicyjnym faktem jest to, że osobniki, których przekształcenie mocniej ściska obrazek, okazują się być średnio lepsze. Wynika to stąd, że dopasowanie opiera
+się jedynie na punktach charakterystycznych; im mniejszy obrazek, tym mniej owych punktów, a zatem łatwiej wskazać jakikolwiek fragment zapytania, w którym punkty
+rozkładają się podobnie. Ekstremalnym przypadkiem tego problemu jest ściśnięcie obrazka tak bardzo, że zostaje z niego tylko jeden punkt. Oczywiście dopasowanie
+pojedyńczego punktu nie nastręcza żadnych trudności niezależnie od tego, co znajduje się na obrazku z zapytania. Należy zauważyć, że problem ten występuje jedynie
+w programie rozpoznającym mozaiki. Program dopasowujący pojedyńcze obrazki nie próbuje kompensować zmian gęstości POI, zatem próby drastycznego zmniejszenia obrazka
+powodują powstanie ogromnego zagęszczenia POI, które nie daje się dobrze dopasować według reguł opisanych powyżej lub otrzymuje wielkie kary z względów opisanych poniżej.
 
-Na szczęście rozwiązanie znalazło się trywialne -- wystarczy podzielić odległość przez rozpiętość obrazka. Wówczas osobniki o przekształceniach z wyższą skalą dostają rekompensatę.
-Teraz z kolei nasuwa się pytanie o słowo ,,rozpiętość''. Ponieważ jest to całkowita heurystyka, wystarczającym okazało się wyznaczenie prostokąta zawierającego wszystkie punkty 
-obrazka bazowego po przekształceniu, a następnie policzeniu długości jego przekątnej.
+Zastosowane rozwiązanie polega na wprowadzeniu do funkcji celu ,,rozpiętości'' obrazka. Dzieląc wartość funkcji celu przez ,,rozpiętość'' przekształconego obrazka z 
+bazy promujemy większe osobniki, a udzielamy kary mniejszym. Ponieważ zastosowane rozwiązanie jest całkowitą heurystyką, ,,rozpiętość'' zdefiniowano jako długość
+przekątnej prostokąta zawierającego wszystkie przekształcone punkty obrazka bazowego. Prawdopodobnie lepszą miarą byłby promień najmniejszego koła pokrywającego,
+lecz obliczenie tej wielkości jest niebanalne.
 
-\paragraph{przeszkoda 3: bagatelizacja dużych błędów}
+\paragraph{Przeszkoda 3: bagatelizacja dużych błędów}
 Oczywistym jest, że w przypadku nawet niemal identycznych obrazków, ich POI nie będą idealnie się pokrywały. Wynika to z charakterystyki ich wyboru; dopuszczalne jest, by były oddalone
 o odległość o rzędzie wielkości podobnym do odległości między POI na jednym obrazku (czyli mniej więcej średnia wielkość tabu). 
 Bardzo dobrym rozwiązaniem okazało się wprowadzenie niejednorodnej funkcji odległości -- jeżeli odległość POI bazowego od najbliższego mu POI z zapytania nie przekracza średniego ,,zasięgu''
