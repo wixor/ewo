@@ -676,7 +676,7 @@ void Population::deMating(Agent *a, const Agent *p, const Agent *q, const Agent 
 /* this tells us when to stop */
 bool Population::terminationCondition() const
 {
-    return generationNumber > cfgMaxGenerations;
+    return generationNumber >= cfgMaxGenerations;
 }
 
 /* how many specimen will make it to the next round */
