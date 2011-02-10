@@ -216,7 +216,9 @@ Sprawdziliśmy kilka obiecująco brzmiących rozwiązań, jednak żadne z nich n
 
 Dzięki powyższym modyfikacjom udało się zmusić algorytm do działania na niektórych, prostszych, mozaikach. Dobrze działają mozaiki złożone z prostych figur geometrycznych,
 jednakże z bardziej skomplikowanymi kształtami program sobie nie radzi. W szczególności niewypałem okazały się próby użycia go do mozaik owocowych, czy zawierających cyfry.
-Poniżej przedstawiamy wykonane testy.
+Poniżej przedstawiamy wykonane testy. 
+
+Średni całkowity czas ewolucji to ok 90-150 sekund, co daje około 10-15 sekund na pojedynczy obrazek.
 
 \subsection{Testy geometryczne}
 
@@ -289,8 +291,8 @@ Oczywiście, moglibyśmy pokazać więcej chlubnych przykładów działania nasz
 nam na drodze.
 
 \subsection{Testy z cyframi}
-\paragraph{Test typowy, ale niedziałający: 2, 3, 6}
-W niniejszym teście będziemy starali się rozpoznać co jest na mozaice złożonej z kilku cyfr. Warto wspomnieć, że każdy z elementów mozaiki z osobna dobrze bądź idealnie dopasowuje się do
+\paragraph{Test niedziałający: 2, 3, 6}
+W niniejszym teście będziemy starali się rozpoznać, co jest przedstawione na mozaice złożonej z kilku cyfr. Warto wspomnieć, że każdy z elementów mozaiki z osobna dobrze bądź idealnie dopasowuje się do
 pewnego obrazka z bazy danych.
 
 Niestety, żadna z cyfr (2,3,6) nie dopasowała się poprawnie do odpowiedniego fragmentu mozaiki. Rezultaty widać na \ref{test5-pics}. Zaś wyniki numeryczne są następujące:
@@ -307,17 +309,21 @@ digs/9_3.pgm: -4.214192
 digs/6_3.pgm: -4.326057
 digs/4_3b.pgm: -5.482895
 \end{verbatim}
-Patrząc na obrazki, można dostrzec 
+Patrząc na obrazki, można dostrzec przeszkody, o których pisaliśmy w podrozdziale 4.2. Przeanalizujmy kolejne próby dopasowań.
+
+Dwójka i trójka są klasycznymi świadectwami przeszkody czwartej - w szóstce łatwo znaleźć fragment, który wygląda jak 2 albo 3.
+Czwórka jest przykładem na przeszkodę drugą (łatwiej było dopasować cyfrę ściśniętą maksymalnie w granicach, o których była mowa w tymże podrozdziale).
+Natomiast szóstka świadczy o tym, że pomimo że poradziliśmy sobie z przeszkodą trzecią (mianowicie, wystające poza obrys szóstki na mozaice fragmenty cyfry dostały wysoką karę)
+nie potrafiliśmy wyrwać się z tego maksimum lokalnego -- najprawdopodobniej dobrym rozwiązaniem okazałoby się dopracowanie równań opisujących zmienne parametry ewolucji.
 
 \begin{figure}\centering
 \subfloat[dwójka]{\includegraphics[width=5cm,keepaspectratio=true]{./test5/match2.png}}\hspace{1mm}
 \subfloat[trójka]{\includegraphics[width=5cm,keepaspectratio=true]{./test5/match3.png}}\hspace{1mm}
 \subfloat[czwórka]{\includegraphics[width=5cm,keepaspectratio=true]{./test5/match5.png}}\hspace{1mm}
 \subfloat[szóstka]{\includegraphics[width=5cm,keepaspectratio=true]{./test5/match7.png}}\hspace{1mm}
-\subfloat[dziewiątka]{\includegraphics[width=5cm,keepaspectratio=true]{./test5/match10.png}}\hspace{1mm}
+\subfloat[ósemka]{\includegraphics[width=5cm,keepaspectratio=true]{./test5/match10.png}}\hspace{1mm}
 \caption{Dopasowania cyfr do mozaiki, test 3}{\label{test5-pics}}
 \end{figure}
-
 
 \section{Uwagi implementacyjne}
 
