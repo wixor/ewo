@@ -110,18 +110,24 @@ bazy promujemy większe osobniki, a udzielamy kary mniejszym. Ponieważ zastosow
 przekątnej prostokąta zawierającego wszystkie przekształcone punkty obrazka bazowego. Prawdopodobnie lepszą miarą byłby promień najmniejszego koła pokrywającego,
 lecz obliczenie tej wielkości jest niebanalne.
 
-\paragraph{Przeszkoda 3: bagatelizacja dużych błędów}
-Oczywistym jest, że w przypadku nawet niemal identycznych obrazków, ich POI nie będą idealnie się pokrywały. Wynika to z charakterystyki ich wyboru; dopuszczalne jest, by były oddalone
-o odległość o rzędzie wielkości podobnym do odległości między POI na jednym obrazku (czyli mniej więcej średnia wielkość tabu). 
-Bardzo dobrym rozwiązaniem okazało się wprowadzenie niejednorodnej funkcji odległości -- jeżeli odległość POI bazowego od najbliższego mu POI z zapytania nie przekracza średniego ,,zasięgu''
-POI, funkcja jest liniowa, jeżeli zaś przekracza -- sześcienna.
-Formalniej, niech $\mathrm{avg}_t$ będzie średnią najkrótszą odległością między POI obrazka z zapytania, zaś $d_0$ realną odległością euklidesową POI dla których chcemy policzyć ,,ulepszoną'' odległość.
-Wówczas odległość użyta do obliczania funkcji celu wyraża się wzorem:
-\[ d_r = \begin{cases}
-	    d_0 & \text{jeżeli } d_0 < \mathrm{avg}_t / 2 \\
-	    d_0^3 / 4\mathrm{avg}_t^2 & \text{w przeciwnym wypadku}
+\paragraph{Przeszkoda 3: bagatelizacja małych błędów}
+Okazuje się, że nawet w przypadku nawet niemal identycznych obrazków, ich POI nie będą idealnie się pokrywały. Wynika to z między innymi z specyfiki algorytmu oceny
+,,ciekawości'' pikseli, który nie jest niezmienniczy względem obrotów i skalowań, jak również ze znacznych trudności z znalezieniem perfekcyjnego dopasowania przy
+użyciu algorytmów ewolucyjnych. Chcemy zatem nazwać dopasowanie dobrym, jeżeli odległość między POI z bazy, a POI z zapytania jest rzędu wielkości średniej odległości
+POI w zapytaniu. Można to sobie wyobrazić w następujący sposób: rozpatrzmy obraz z ostrą krawędzią. Punkty charakterystyczne na owej krawędzi rozmieszczone będą
+dość równomiernie (aby to sprawdzić, wystarczy uruchomić któryś z przykładów geometrycznych lub tekstowych). Nie musimy wymagać, aby punkty z bazy pokryły się idealnie
+z punktami z zapytania; wystarczy nam jedynie, aby między każdymi dwoma punktami z zapytania znalazł się jakiś punkt z bazy (czyli, aby punkty z bazy również były
+rozmieszczone równomiernie wzdłuż rozpatrywanej krawędzi).
+
+Aby osiągnąć ten efekt, wprowadzamy nieliniową funkcję odległości POI. Najpierw obliczamy średnią odległość między punktami charakterystycznymi z zapytania (wystarczy
+zrobić to raz, gdyż obrazek z zapytania nie zmienia sie). Następnie, jeżeli znaleziona odległość POI bazowego od najbliższego mu POI z zapytania nie przekracza połowy
+owej średniej odległości, funkcja jest liniowa, jeżeli zaś przekracza -- sześcienna. Formalniej, niech $\mathrm{avg}_t$ będzie średnią odległością między POI obrazka
+z zapytania, zaś $d$ odległością euklidesową rozpatrywanych POI. Wówczas odległość użyta do obliczania funkcji celu wyraża się wzorem:
+\[ d' = \begin{cases}
+	    d & \text{jeżeli } d_0 < \mathrm{avg}_t / 2 \\
+	    d^3 / 4\mathrm{avg}_t^2 & \text{w przeciwnym wypadku}
 	 \end{cases} \]
-Skalowanie tej wartości o kwadrat $\mathrm{avg}_t$ ma na celu uciąglenie funkcji.
+Współczynnik $1 / 4\mathrm{avg}_t^2$ zapewnia ciągłość funkcji w punkcie $d$.
 
 \paragraph{przeszkoda 4: im gęściej, tym łatwiej coś dla siebie znaleźć}
 To jest główny mankament algorytmu. Jeżeli mozaika z zapytania składa się z obrazków istotnie różniących się skupieniem POI 
