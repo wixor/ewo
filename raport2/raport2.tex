@@ -180,8 +180,35 @@ Patrząc na obrazki oraz wynik pozostałe figury mają niską funkcję celu, zat
 \subfloat[podkowa]{\includegraphics[width=5cm,keepaspectratio=true]{./test1/match8.png}}\hspace{1mm}
 \subfloat[4-ro listna koniczyna]{\includegraphics[width=5cm,keepaspectratio=true]{./test1/match9.png}}\hspace{1mm}
 \subfloat[domek]{\includegraphics[width=5cm,keepaspectratio=true]{./test1/match10.png}}\hspace{1mm}
-\subfloat[screenshot z wyników]{\includegraphics[width=5cm,keepaspectratio=true]{./test1/result.png}}
-\caption{Dopasowania figur do mozaiki}{\label{test1-pics}}
+\caption{Dopasowania figur do mozaiki, test 1}{\label{test1-pics}}
 \end{figure}
 
+\paragraph{Test drugi: uśmiech, domek, koniczyna, muszka}
+W tym teście postanowiliśmy zrobić mozaikę z bardziej skomplikowanych figur. Wyniki nadal są zadowalające, jednak częściej zdarzają się błedy.
+Oto wynik typowego uruchomienia:
+\begin{verbatim}
+geom/triangle1.png: -1.089741
+geom/clover.png: -2.495673
+geom/balls.png: -2.622310
+geom/circle.png: -2.776270
+geom/house.png: -2.873120
+geom/square.png: -3.610290
+geom/cross.png: -4.051198
+geom/arch.png: -5.901488
+geom/4star.png: -13.952413
+geom/5star.png: -31.386328
+\end{verbatim}
+Teraz skupimy się na bardziej interesujących dopasowaniach.
+Bardzo dobrze odnalazł się trójkąt we fragmencie muszki. Koniczyna dopasowała sie bez zarzutu, do muszki także podobne są dwa złączone kółka.
+Natomiast uśmiech okazał się relatywnie podobny do podkowy (łuku). Niestety, nie udało się znaleźć dopasowania domku do domku. 
+Ale nie można być idealnym. Na potwierdzenie słów, przedstawiamy kilka rezultatów działania: \ref{test3-pics}
+
+\begin{figure}\centering
+\subfloat[trójkąt]{\includegraphics[width=5cm,keepaspectratio=true]{./test3/match4.png}}\hspace{1mm}
+\subfloat[podkowa (arch)]{\includegraphics[width=5cm,keepaspectratio=true]{./test3/match8.png}}\hspace{1mm}
+\subfloat[kulki]{\includegraphics[width=5cm,keepaspectratio=true]{./test3/match7.png}}\hspace{1mm}
+\subfloat[domek]{\includegraphics[width=5cm,keepaspectratio=true]{./test3/match10.png}}\hspace{1mm}
+\subfloat[gwiazda 5-cio ramienna]{\includegraphics[width=5cm,keepaspectratio=true]{./test3/match5.png}}
+\caption{Dopasowania figur do mozaiki, test 2}{\label{test3-pics}}
+\end{figure}
 \end{document}
