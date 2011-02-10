@@ -98,6 +98,7 @@ struct Point
 
     inline Point operator+(const Point &p) const { return Point(x+p.x, y+p.y); }
     inline Point operator-(const Point &p) const { return Point(x-p.x, y-p.y); }
+    inline Point operator*(float k) const { return Point(x*k, y*k); }
     inline float distsq() const { return x*x + y*y; }
     inline float dist() const { return sqrtf(distsq()); }
     /* distance used in evaluation */

@@ -30,8 +30,7 @@ static int cfgPOICount, cfgPOISparseCount;
 static int cfgProxMapDetail, cfgProxMapEntries;
 static int cfgPopulationSize;
 static std::vector<float> cfgSurvivalEq;
-static float cfgStopCoeff;
-static int cfgStopBacklog, cfgMaxGenerations;
+static int cfgMaxGenerations;
 static float cfgTranslateInit, cfgRotateInit, cfgScaleInit;
 static float cfgTranslateProp,  cfgRotateProp,  cfgScaleProp, cfgFlipProp;
 static float cfgTranslateDev,   cfgRotateDev,   cfgScaleDev;
@@ -51,8 +50,6 @@ static struct config_var cfgvars[] = {
     /* evolution */
     { "populationSize", config_var::INT,       &cfgPopulationSize },
     { "survivalEq",     config_var::CALLBACK,  (void *)&parseSurvivalEq },
-    { "stopBacklog",    config_var::INT,       &cfgStopBacklog },
-    { "stopCoeff",      config_var::FLOAT,     &cfgStopCoeff },
     { "maxGenerations", config_var::INT,       &cfgMaxGenerations },
     /* initial population generation parameters */
     { "translateInit",  config_var::FLOAT,     &cfgTranslateInit },
@@ -386,7 +383,8 @@ public:
         ps.resize(known->sparse.size());
         for(int i=0; i<(int)known->sparse.size(); i++)
             ps[i] = ms[0] * known->sparse[i];
-        drawDots(ps,6, knownColor);
+        drawDots(ps,6, knownColor); 
+
         
 /*      debug("drawing took %.6f ms", tim.end()*1000.f); */
     }
@@ -464,9 +462,6 @@ class Population
     /* our lovely little things */
     std::vector<Agent> pop;
 
-    /* history record of best scores, one entry per generation */
-    std::vector<float> targetSpan;
-
     /* current generation number */
     int generationNumber;
 
@@ -483,7 +478,6 @@ class Population
 
     };
     inline void evaluate();
-    int fullsearches;
 
     /* roulette selection */
     int roulette(int n);
@@ -494,6 +488,7 @@ class Population
     inline void deMating(Agent *a, const Agent *p, const Agent *q, const Agent *r);
 
     /* one needs to know when to stop! */
+    float pointCloudDiameter(Point p) const;
     inline bool terminationCondition() const;
 
     /* how many specimen will advance to the next generation */
@@ -527,7 +522,6 @@ void Population::EvaluationJob::runOne(Agent *agent)
     memset(cnts, 0, sizeof(cnts));
 
     float average = 0;
-    int fullsearches = 0;
     for(int i=0; i<(int)known->sparse.size(); i++)
     {
         float bestdist = 1e+6;
@@ -552,9 +546,8 @@ void Population::EvaluationJob::runOne(Agent *agent)
             }
         } 
 
-        /* if ProximityArray failed, run the full search */
+        /* if ProximityArray failed, run the full search *
         if(bestidx == -1 && false) {
-            fullsearches++;
             for(int j=0; j<(int)alien->sparse.size(); j++)
             {
                 float dist = (p - alien->sparse[j]).dist();
@@ -563,7 +556,7 @@ void Population::EvaluationJob::runOne(Agent *agent)
                     bestidx = j;
                 }
             }
-        }
+        } */
 
         if(bestdist < alien->avgpoidist || bestidx == -1)
             average += bestdist;
@@ -575,9 +568,6 @@ void Population::EvaluationJob::runOne(Agent *agent)
     
     average /= known->sparse.size();
     agent->target = -average;
-
-    /* warning! this is not thread-safe, results may be wrong */
-    uplink->fullsearches += fullsearches;
 }
 void Population::evaluate()
 {
@@ -593,11 +583,9 @@ void Population::evaluate()
         jobs[i].end = std::min((int)pop.size(), evalBatch*(i+1));
     }
 
-    fullsearches = 0;
     for(int i=0; i<nJobs; i++)
         aq->queue(&jobs[i]);
     c.wait();
-    debug("did at least %d fullsearches", fullsearches);
 
     float minTarget = 1e+30;
     for(int i=0; i<(int)pop.size(); i++)
@@ -688,17 +676,13 @@ void Population::deMating(Agent *a, const Agent *p, const Agent *q, const Agent 
 /* this tells us when to stop */
 bool Population::terminationCondition() const
 {
-    if(generationNumber > cfgMaxGenerations)
-        return true;
-
-    return (int)targetSpan.size() >= cfgStopBacklog &&
-           *(targetSpan.end()-cfgStopBacklog) / targetSpan.back() < cfgStopCoeff;
+    return generationNumber > cfgMaxGenerations;
 }
 
 /* how many specimen will make it to the next round */
 float Population::getSurvivalRate() const
 {
-    float v = 0, x = (float) (generationNumber-1) / (cfgMaxGenerations-1);
+    float v = 0, x = std::min(1.f, (generationNumber-1.f) / (cfgMaxGenerations-1.f));
     for(int i=0; i<(int)cfgSurvivalEq.size(); i++)
         v = x*v + cfgSurvivalEq[i];
     assert(v >= 0 && v <= 1);
@@ -740,7 +724,6 @@ Agent Population::evolve()
             bestDS.ms.push_back(pop[i].M);
         bestDS.unlock();
 
-        targetSpan.push_back(pop[0].target - pop[pop.size()/2].target);
         if (bestEver.target < pop[0].target)
             bestEver = pop[0];
         
