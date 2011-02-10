@@ -8,10 +8,6 @@
 \usepackage{subfig}
 \usepackage{wrapfig}
 
-\newcommand{\nel}[1]{|#1|}
-
-\usepackage{program}
-
 \title{\textbf{Algorytmy ewolucyjne}\\
        {\Large Raport z zadania pierwszego}\\[-1ex]}
 \author{Karol Konaszyński i Wiktor Janas}
@@ -60,6 +56,19 @@ współrzędnych. Okazuje się, że nie jest to zły pomysł, gdyż w większoś
 Warto również zastanowić się, jakiej odpowiedzi udzielimy dla punktów, które znajdują się na styku plam. Łatwo zauważyć, że punkty takie znajdują się w podobnej odległości od obu źródeł,
 więc nawet jeżeli nie udzielimy dokładnej odpowiedzi (bo współrzędne zaokrąglą się ,,nie w tą stronę''), to popełniany błąd będzie bardzo niewielki. Istotnie, eksperymenty wykazały, że
 odległość liczona metodą brutalną może różnić się od odległości wziętej z mapy o conajwyżej ułamki procenta.
+
+Przykładową mapę pobliskich punktów prezentuje rysunek \ref{proxmap}. Przedstawiono na nim obrazek wyjściowy, znalezione punkty charakterystyczne, najbliższe punkty oraz drugie najbliższe
+punkty. Wizualizacja najbliższych punktów opiera się na naiwnym algorytmie kolorowania grafu planarnego, zatem można być prawie pewnym, że sąsiadujące ze sobą obszary są zaznaczone
+różnymi kolorami. Warto zwrócić uwagę, że sturuktura drugich najbliższych punktów jest bardzo skomplikowana. Koszt obliczenia takiej mapy to około rozmiar obrazka razy ilość najbliższych
+punktów, które chcemy spamiętać dla każdego piksela. W przedstawionym przykładzie jest to $400 \times 322 \times 6 \approx 0.7 \text{mln}$. Obliczenia takie trwają kilka sekund. Algorytm 
+obliczania tej mapy nie został zrównoleglony, zatem wykorzystuje tylko jeden rdzeń procesora. Zrównoleglenie algorytmu prawdopodobnie jest możliwe, ale nie wydaje się proste.
+
+\begin{figure}\centering
+\subfloat[obrazek + poi]{\includegraphics[width=5cm,keepaspectratio=true]{./proxmap/apple-pois.png}}\hspace{1mm}
+\subfloat[najbliższe punkty]{\includegraphics[width=5cm,keepaspectratio=true]{./proxmap/apple-prox-0.png}}\hspace{1mm}
+\subfloat[drugie najbliższe punkty]{\includegraphics[width=5cm,keepaspectratio=true]{./proxmap/apple-prox-1.png}}\hspace{1mm}
+\caption{Mapa pobliskich punktów}{\label{proxmap}}
+\end{figure}
 
 \section{Zmienne parametry ewolucji}
 
