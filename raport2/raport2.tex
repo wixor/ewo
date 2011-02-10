@@ -141,11 +141,47 @@ oczekiwanych rezultatów.
 
 Problem pozostał niestety nierozwiązany, jednak nie występuje w przypadku prostych testów.
 
-\subsection{Zastosowanie wspomnianych pomysłów w praktyce}
+\section{Testy moizaikowe}
 \paragraph{wpływ ulepszeń na wyniki}
-Dzięki powyższym ulepszeniom udało się zmusić nasz algorytm do działania na niektórych, prostszych, mozaikach. W szczególności, działają mozaiki złożone z prostych figur geometrycznych
+Dzięki powyższym ulepszeniom udało się zmusić nasz algorytm do działania na niektórych, prostszych, mozaikach. W szczególności, dobrze działają mozaiki złożone z prostych figur geometrycznych,
+jednakże z bardziej skomplikowanymi kształtami program sobie nie radzi. W szczególności, niewypałem okazały się próby użycia go do mozaik owocowych a także z cyframi.
+Poniżej przedstawiamy testy, które wykonaliśmy i niech stanowią one poparcie powyższych słów.
 
+\subsection{Testy geometryczne}
+\paragraph{Test pierwszy: okrąg, kwadrat, trójkąt, krzyż}
+W tym teście mozaika składa się z czterech powyżej wymienionych figur. Jest to test najprostszy, wynika to z niewyszukanego kształtu figur. Okazuje się, że tutaj algorytm sprawdza się prawie 
+idealnie (myląc się raz na kilka uruchomień). Rezultaty działania oceniamy w tym momencie wyłącznie intuicyjnie, starając się określić, czy algorytm znalazł wystarczająco dobre dopasowanie.
+Poniżej podajemy wyniki liczbowe:
+\begin{verbatim}
+geom/square.png: -0.484211
+geom/cross.png: -2.293484
+geom/circle.png: -3.587710
+geom/house.png: -3.607674
+geom/clover.png: -4.487347
+geom/triangle1.png: -5.323895
+geom/balls.png: -13.413114
+geom/4star.png: -26.052204
+geom/arch.png: -30.556473
+geom/5star.png: -37.949917
+\end{verbatim}
 
+Rysunki \ref{test1-pics} pokazują, że tak jest istotnie. Kwadrat poprawnie dopasował się do kwadratu, okrąg niestety także do kwadratu, wynika to z (zamierzonej) niedoskonałości obu rysunków.
+Podobnie niewielką odległość okazały się mieć krzyż oraz czterolistna koniczyna (zgodnie z oczekiwaniami) oraz trójkąt i ``domek'' (podobny do trójkąta).
+Patrząc na obrazki oraz wynik pozostałe figury mają niską funkcję celu, zatem możemy stwierdzić, że
 
+\begin{figure}\centering
+\subfloat[kwadrat]{\includegraphics[width=5cm,keepaspectratio=true]{./test1/match1.png}}\hspace{1mm}
+\subfloat[krzyż]{\includegraphics[width=5cm,keepaspectratio=true]{./test1/match2.png}}\hspace{1mm}
+\subfloat[koło]{\includegraphics[width=5cm,keepaspectratio=true]{./test1/match3.png}}\hspace{1mm}
+\subfloat[trójkąt]{\includegraphics[width=5cm,keepaspectratio=true]{./test1/match4.png}}\hspace{1mm}
+\subfloat[gwiazda 5-cio ramienna]{\includegraphics[width=5cm,keepaspectratio=true]{./test1/match5.png}}\hspace{1mm}
+\subfloat[gwiazda 4-ro ramienna]{\includegraphics[width=5cm,keepaspectratio=true]{./test1/match6.png}}\hspace{1mm}
+\subfloat[dwa koła]{\includegraphics[width=5cm,keepaspectratio=true]{./test1/match7.png}}\hspace{1mm}
+\subfloat[podkowa]{\includegraphics[width=5cm,keepaspectratio=true]{./test1/match8.png}}\hspace{1mm}
+\subfloat[4-ro listna koniczyna]{\includegraphics[width=5cm,keepaspectratio=true]{./test1/match9.png}}\hspace{1mm}
+\subfloat[domek]{\includegraphics[width=5cm,keepaspectratio=true]{./test1/match10.png}}\hspace{1mm}
+\subfloat[screenshot z wyników]{\includegraphics[width=5cm,keepaspectratio=true]{./test1/result.png}}
+\caption{Dopasowania figur do mozaiki}{\label{test1-pics}}
+\end{figure}
 
 \end{document}
