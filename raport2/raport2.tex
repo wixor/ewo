@@ -29,7 +29,37 @@ Po drugie, staraliśmy się uogólnić algorytm tak, aby był zdolny do rozpozna
 W wyniku realizacji projektu powstały dwa programy. Jeden jest ograniczony do rozpoznawania pojedyńczych obrazów tak, jak było to w poprzedniej części projektu, zawiera jednak znaczne
 usprawnienia wydajnościowe. Drugi program jest rozszerzony o rozpoznawanie mozaik, kosztem istotnie większego czasu działania.
 
-\section{Przyspieszanie dopasowywania obrazów}
+\section{Wyszukiwania najbliższych punktów}
+
+Głównym kosztem obliczeniowym algorytmu jest ewaluacja osobników. W celu jej przyspieszenia zastosowano kilka rozwiązań, na przykład podzielono pracę na wątki, aby w pełni wykorzystać 
+moc obliczeniową procesora. Jako, że ewaluacja każdego osobnika jest niezależnym zadaniem, w celu uzyskania dalszych przyspieszeń można zastosować procesory masowo równoległe, takie
+jak procesory graficzne. 
+
+Ewaluacja pojedyńczego osobnika polega, w uproszczeniu, na zadawaniu znacznej ilości pytań postaci ,,jaki punkt w zbiorze $X$ jest najbliższy punktowi $p$''. Kluczową obserwacją okazało
+się, że zbiór $X$ można uczynić stałym (w poprzednim programie zbiór ten był zmienny). W związku z tym przed uruchomieniem właściwej części algorytmu można zastosować preprocessing,
+który następnie umożliwi nam natychmiastowe odpowiadanie na pytania. 
+
+Dla ustalonego zbioru $X$ można wyobrazić sobie podział płaszczyzny na fragmenty: każdy fragment $s$ przypisany jest do pewnego punktu $x$ z $X$ w ten sposób, że dla każdego punktu
+z $s$ najbliższym punktem z $X$ jest właśnie $x$. Okazuje się, że taki podział płaszczyzny na fragmenty istnieje i nazywa się diagramem Voronoia. Diagram Voronoia dla danego zbioru
+$X$ można obliczyć w czasie $n \log n$, gdzie $n = |X|$, jednak jest to zadanie niebanalne; używanie tak uzyskanej struktury również nie byłoby proste. W związku z tym zdecydowaliśmy
+się na uproszczone rozwiązanie.
+
+Wyobraźmy sobie, że umieszczamy punkty z $X$ na dwuwymiarowym obrazku oraz, że chcemy dla każdego piksela tego obrazka znaleźć najbliższy mu punkt z $X$. Tak postawiony problem jest
+bardzo podobny do powyższego, jednak daje się rozwiązać nieporównywalnie prostszymi metodami: dzięki zastąpieniu matematycznego pojęcia płaszczyzny prostszym pojęciem obrazka, obliczamy
+jedynie odległość dla pikseli. Ponadto, możemy dla każdego piksela znaleźć nie jeden najbliższy punkt z $X$, lecz kilka takich punktów, w kolejności rosnącej odległości. Informacja taka
+jest wielce użyteczna we właściwej części algorytmu.
+
+Zastosowany algorytm opiera się na algorytmie Dijkstry. Traktujemy obrazek jako graf ważony, a punkty z $X$ jako źródła, dla których odległość wynosi $0$. Uruchamiając algorytm Dijkstry
+otrzymujemy rozszerzające się ,,plamy'', które wreszcie pokrywają cały obrazek. Pamiętając, w jakiej kolejności dany piksel był zalewany (tzn. która plama dotarła do niego pierwsza, która
+druga itd) otrzymujemy dla owego piksela kolejne najbliższe mu punkty z $X$. Obliczenia te nie są szybkie, jednak trwają też bardzo długo; wynik jest zapamiętywany podobnie jak wynik
+wyszukiwania punktów charakterystycznych. Dzięki temu dla danego obrazka program wykonuje obliczenia jedynie raz, przy następnych uruchomieniach korzysta z wcześniej obliczonych danych.
+
+Przedstawione podejście może nasuwać dwa pytania. Po pierwsze, co, jeżeli chcemy znać najbliższy punkt dla punktu, którego współrzędne nie są całkowite (jest to normalne zjawisko, gdyż
+punkty, o które pytamy są punktami charakterystcznymi przemnożonymi przez macierz, której współczynniki nie muszą być całkowite). Prostym rozwiązaniem tej kwestii jest zaokrąglenie
+współrzędnych. Okazuje się, że nie jest to zły pomysł, gdyż w większości wypadków pytanie o punkt wypada w środku ,,plamy'' i dla wszystkich punktów w otoczeniu odpowiedź jest taka sama.
+Warto również zastanowić się, jakiej odpowiedzi udzielimy dla punktów, które znajdują się na styku plam. Łatwo zauważyć, że punkty takie znajdują się w podobnej odległości od obu źródeł,
+więc nawet jeżeli nie udzielimy dokładnej odpowiedzi (bo współrzędne zaokrąglą się ,,nie w tą stronę''), to popełniany błąd będzie bardzo niewielki. Istotnie, eksperymenty wykazały, że
+odległość liczona metodą brutalną może różnić się od odległości wziętej z mapy o conajwyżej ułamki procenta.
 
 \section{Zmienne parametry ewolucji}
 
