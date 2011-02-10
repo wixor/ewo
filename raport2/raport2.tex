@@ -50,12 +50,15 @@ otrzymujemy rozszerzające się ,,plamy'', które wreszcie pokrywają cały obra
 druga itd) otrzymujemy dla owego piksela kolejne najbliższe mu punkty z $X$. Obliczenia te nie są szybkie, jednak nie trwają też bardzo długo; wynik jest zapamiętywany podobnie jak wynik
 wyszukiwania punktów charakterystycznych. Dzięki temu dla danego obrazka program wykonuje obliczenia jedynie raz, przy następnych uruchomieniach korzysta z wcześniej obliczonych danych.
 
-Przedstawione podejście może nasuwać dwa pytania. Po pierwsze, co należy zrobić, jeżeli chcemy znać najbliższy punkt dla punktu, którego współrzędne nie są całkowite (jest to normalne zjawisko, gdyż
-punkty, o które pytamy są punktami charakterystcznymi przemnożonymi przez macierz, której współczynniki nie muszą być całkowite). Prostym rozwiązaniem tej kwestii jest zaokrąglenie
-współrzędnych. Okazuje się, że nie jest to zły pomysł, gdyż w większości wypadków pytanie o punkt wypada w środku ,,plamy'' i dla wszystkich punktów w otoczeniu odpowiedź jest taka sama.
-Warto również zastanowić się, jakiej odpowiedzi udzielimy dla punktów, które znajdują się na styku plam. Łatwo zauważyć, że punkty takie znajdują się w podobnej odległości od obu źródeł,
-więc nawet jeżeli nie udzielimy dokładnej odpowiedzi (bo współrzędne zaokrąglą się ,,nie w tą stronę''), to popełniany błąd będzie bardzo niewielki. Istotnie, eksperymenty wykazały, że
-odległość liczona metodą brutalną może różnić się od odległości wziętej z mapy o conajwyżej ułamki procenta.
+Przedstawione podejście może nasuwać dwa pytania. Po pierwsze, co należy zrobić, jeżeli chcemy znać najbliższy punkt dla punktu, którego współrzędne nie są całkowite (jest to normalne
+zjawisko, gdyż punkty, o które pytamy są punktami charakterystcznymi przemnożonymi przez macierz, której współczynniki nie muszą być całkowite)? Prostym rozwiązaniem tej kwestii jest
+zaokrąglenie współrzędnych. Okazuje się, że nie jest to zły pomysł, gdyż w większości wypadków pytanie o punkt wypada w środku ,,plamy'' i dla wszystkich punktów w otoczeniu odpowiedź
+jest taka sama. Warto również zastanowić się, jakiej odpowiedzi udzielimy dla punktów, które znajdują się na styku plam. Łatwo zauważyć, że punkty takie znajdują się w podobnej odległości
+od obu źródeł, więc nawet jeżeli nie udzielimy dokładnej odpowiedzi (bo współrzędne zaokrąglą się ,,nie w tą stronę''), to popełniany błąd będzie bardzo niewielki. Istotnie, eksperymenty
+wykazały, że odległość liczona metodą brutalną może różnić się od odległości wziętej z mapy o conajwyżej ułamki procenta. Po drugie, jak odpowiadać na zapytania o punkty, które nie mieszczą
+się na mapie? W tym wypadku postanowiliśmy po prostu ograniczyć współrzędne punktów do rozmiaru mapy. Wszystkie obrazki, na których testujemy nasz program mają pewien margines wokół
+,,właściwej treści'', w związku z tym jedynie skrajnie złe osobniki mają punkty poza mapą. W takim wypadku nie ma wielkiego znaczenia, jakiej odpowiedzi udzielimy, osobniki te prawie na
+pewno i tak nie dopasują się do niczego i zostaną szybko wyeliminowane.
 
 Przykładową mapę pobliskich punktów prezentuje rysunek \ref{proxmap}. Przedstawiono na nim obrazek wyjściowy, znalezione punkty charakterystyczne, najbliższe punkty oraz drugie najbliższe
 punkty. Wizualizacja najbliższych punktów opiera się na naiwnym algorytmie kolorowania grafu planarnego, zatem można być prawie pewnym, że sąsiadujące ze sobą obszary są zaznaczone
@@ -216,7 +219,9 @@ Sprawdziliśmy kilka obiecująco brzmiących rozwiązań, jednak żadne z nich n
 
 Dzięki powyższym modyfikacjom udało się zmusić algorytm do działania na niektórych, prostszych, mozaikach. Dobrze działają mozaiki złożone z prostych figur geometrycznych,
 jednakże z bardziej skomplikowanymi kształtami program sobie nie radzi. W szczególności niewypałem okazały się próby użycia go do mozaik owocowych, czy zawierających cyfry.
-Poniżej przedstawiamy wykonane testy.
+Poniżej przedstawiamy wykonane testy. 
+
+Średni całkowity czas ewolucji to ok 90-150 sekund, co daje około 10-15 sekund na pojedynczy obrazek.
 
 \subsection{Testy geometryczne}
 
@@ -252,7 +257,7 @@ na mozaice.
 \subfloat[podkowa]{\includegraphics[width=5cm,keepaspectratio=true]{./test1/match8.png}}\hspace{1mm}
 \subfloat[4-ro listna koniczyna]{\includegraphics[width=5cm,keepaspectratio=true]{./test1/match9.png}}\hspace{1mm}
 \subfloat[domek]{\includegraphics[width=5cm,keepaspectratio=true]{./test1/match10.png}}\hspace{1mm}
-\caption{Dopasowania figur do mozaiki, test 1}{\label{test1-pics}}
+\caption{Mozaika z figurami (test 1)}{\label{test1-pics}}
 \end{figure}
 
 \paragraph{Test drugi: uśmiech, domek, koniczyna, muszka}
@@ -282,13 +287,15 @@ jakkolwiek nie istnieje dobre dopasowanie, oczekiwalibyśmy raczej dopasowania d
 \subfloat[kulki]{\includegraphics[width=5cm,keepaspectratio=true]{./test3/match7.png}}\hspace{1mm}
 \subfloat[domek]{\includegraphics[width=5cm,keepaspectratio=true]{./test3/match10.png}}\hspace{1mm}
 \subfloat[gwiazda 5-cio ramienna]{\includegraphics[width=5cm,keepaspectratio=true]{./test3/match5.png}}
-\caption{Dopasowania figur do mozaiki, test 2}{\label{test3-pics}}
+\caption{Mozaika z figurami (test 2)}{\label{test3-pics}}
 \end{figure}
 
 \paragraph{Test z cyframi 2, 3, 6}
+
 Moglibyśmy pokazać więcej przykładów działania naszego algorytmu, chcemy jednak zaprezentować testy niedziałające, aby zilustrować przeszkody, które stanęły nam na drodze.
 W tym teście będziemy starali się rozpoznać mozaikę złożoną z kilku cyfr. Każdy z elementów mozaiki z osobna dobrze bądź idealnie dopasowuje się do pewnego obrazka z bazy danych.
 Niestety, żadna z cyfr 2, 3, 6 nie dopasowała się poprawnie do odpowiedniego fragmentu mozaiki. Rezultaty widać na rysunku \ref{test5-pics}. Wyniki numeryczne są następujące:
+
 \begin{verbatim}
 digs/2_3.pgm: -1.945461
 digs/5_3.pgm: -2.889184
@@ -302,17 +309,20 @@ digs/9_3.pgm: -4.214192
 digs/6_3.pgm: -4.326057
 digs/4_3b.pgm: -5.482895
 \end{verbatim}
-Patrząc na obrazki, można dostrzec 
+
+Patrząc na obrazki można dostrzec problemy, o których pisaliśmy w podrozdziale 4.2. Przeanalizujmy kolejne próby dopasowań. Dwójka i trójka są klasycznymi przykładami problemu
+czwartego -- w szóstce łatwo znaleźć fragment, który wygląda jak 2 albo 3. Czwórka jest przykładem na problemu drugiego (najłatwiej było ścisnąć cyfrę i dopasować ją gdziekolwiek).
+Natomiast szóstka pokazuje, że pomimo że poradziliśmy sobie z przeszkodą trzecią (wystające poza obrys szóstki punkty cyfry dostały wysoką karę), nie potrafiliśmy wyrwać się z
+tego maksimum lokalnego -- najprawdopodobniej dobrym rozwiązaniem okazałoby się dopracowanie równań opisujących zmienne parametry ewolucji.
 
 \begin{figure}\centering
 \subfloat[dwójka]{\includegraphics[width=5cm,keepaspectratio=true]{./test5/match2.png}}\hspace{1mm}
 \subfloat[trójka]{\includegraphics[width=5cm,keepaspectratio=true]{./test5/match3.png}}\hspace{1mm}
 \subfloat[czwórka]{\includegraphics[width=5cm,keepaspectratio=true]{./test5/match5.png}}\hspace{1mm}
 \subfloat[szóstka]{\includegraphics[width=5cm,keepaspectratio=true]{./test5/match7.png}}\hspace{1mm}
-\subfloat[dziewiątka]{\includegraphics[width=5cm,keepaspectratio=true]{./test5/match10.png}}\hspace{1mm}
-\caption{Dopasowania cyfr do mozaiki, test 3}{\label{test5-pics}}
+\subfloat[ósemka]{\includegraphics[width=5cm,keepaspectratio=true]{./test5/match10.png}}\hspace{1mm}
+\caption{Mozaika z cyframi}{\label{test5-pics}}
 \end{figure}
-
 
 \section{Uwagi implementacyjne}
 
