@@ -72,9 +72,25 @@ obliczania tej mapy nie został zrównoleglony, zatem wykorzystuje tylko jeden r
 
 \section{Zmienne parametry ewolucji}
 
+Analizując wpływ parametrów na działanie poprzedniego programu zauważyliśmy, że bardzo istotna jest wartość współczynnika przetrwania. Mianowicie, niskie współczynniki przetrwania
+powodują bardzo szybką zbieżność populacji. Jest to efekt pożądany w momencie, gdy algorytm jest już blisko rozwiązania optymalnego: umożliwia bowiem skoncentrowanie wszystkich
+osobników na optymalizacji tego właśnie rozwiązania. Z drugiej strony nie można prowadzić ewolucji od początku z niskim współczynnikiem przetrwania, gdyż spowoduje to szybką
+zbieżność do ,,pierwszego lepszego'' minimum.
+
+W związku z powyższą obserwacją, wprowadziliśmy do algorytmu zmienny współczynnik przetrwania. Jego wartość jest opisana wielomianem, którego argumentem jest liczba z zakresu
+$0 \dots 1$, przy czym $0$ oznacza pierwsze, a $1$ ostatnie pokolenie ewolucji (ilość pokoleń jest z góry ustalona). Wielomian ten jest dany w pliku konfiguracyjnym i dla programu
+rozpoznającego pojedyńcze obrazki ma postać $-0.3x + 0.8$, zaś dla programu pracującego z mozaikami $-0.2 + 0.8$. Oznacza to, że wartość współczynnika przetrwania zmienia się
+liniowo od $80\%$ do $50\%$ lub $60\%$. Przeprowadziliśmy eksperymenty z wielomianami wyższego stopnia, jednak nie okazały się one wyraźnie lepsze. Obserwując działanie programu
+wyraźnie widać, jak malejący współczynnik przetrwania (widoczny w pasku na dole) ,,ogniskuje'' populacje.
+
+W przypadku programu rozpoznającego mozaiki poszliśmy krok dalej: wprowadziliśmy również zmienne wspólczynniki mutacji. Zadanie tego programu jest istotnie różne od programu
+rozpoznającego pojedyńcze obrazy. Najpierw chcemy starannie przeszukać całą przestrzeń rozwiązań, aby znaleźć ,,ogniska'', to znaczy miejsca, w których znajdują się pod-obrazy mozaiki.
+Następnie chcemy koncentrować się na optymalizacji w tych obszarach. Dlatego też na początku współczynniki mutacji są zwiększone, później zaś maleją. Wprowadzenie tej zmiany istotnie
+poprawiło wyniki osiągane przez program.
+
 \section{Prace nad mozaikami}
 
-Przez \textit{mozaikę} rozumiemy obrazek będący sklejeniem kilku (najczęściej czterech) obrazów podstawowych (patrz rys. \ref{mosaic}).
+Przez \textit{mozaikę} rozumiemy obrazek będący sklejeniem kilku (najczęściej czterech) obrazów podstawowych.
 Naszym celem jest rozpoznanie obrazków składowych takiej mozaiki, czyli dopasowanie obrazków z bazy danych do fragmentu zapytania.
 Niestety, algorytm badany w pierwszej części projektu nie działał dla takich testów.
 
