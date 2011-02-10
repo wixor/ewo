@@ -88,6 +88,24 @@ rozpoznającego pojedyńcze obrazy. Najpierw chcemy starannie przeszukać całą
 Następnie chcemy koncentrować się na optymalizacji w tych obszarach. Dlatego też na początku współczynniki mutacji są zwiększone, później zaś maleją. Wprowadzenie tej zmiany istotnie
 poprawiło wyniki osiągane przez program.
 
+\section{Usprawnienia wydajnościowe}
+
+Oprócz opisanego powyżej mechanizmu do programu wprowadzono kilka usprawnień wydajnościowych. Okazało się, że znaczną (zdecydowanie zbyt wielką) część czasu procesora zajmowała
+wizualizacja. Mechanizm rysowania został napisany od zera z wykorzystaniem możliwości kart graficznych; przy okazji wizualizacja została udoskonalona, program wyświetla znalezione
+dopasowanie w bardziej czytelny sposób, pokazuje jednocześnie punkty charakterystyczne obu obrazów (które są wszak podstawą działania programu) oraz pewną ilość równomiernie wybranych
+osobników. Całość rysowania zajmuje jedynie ułamki sekund; ekran odświeżany jest co pół sekundy, aby można było coś zauważyć. Program rozpoznający pojedyńcze obrazki działa tak szybko
+(około 1/5 sekundy na obrazek), że aby pokazać ostateczne dopasowanie algorytm jest zatrzymywany na dwie sekundy po każdym obrazie. Wielkie zasługi w przyspieszeniu działania programu
+ma również opisana powyżej zmienność współczynnika przetrwania. Umożliwiła ona zmniejszenie ilości pokoleń z dwustu do osiemdziesięciu. Ostatecznie dopasowanie jabłka do bazy owoców
+zajmowało staremu programowi 67 sekund, nowy zaś kończy pracę po 3 sekundach (nie wliczając opóźnień). Warto zauważyć, że wynik starego programu jest ,,dopieszczony'', podczas gdy nowy
+program zadowala się bliskimi rozwiązaniami. Powoduje to, że czasami (jakkolwiek rzadko) zdarza się, że nowy program znajdzie niewłaściwe minimum lokalne. Zazwyczaj jednak znalezione
+dopasowania są bardzo podobne. Rysunek \ref{speedy} pokazuje dopasowanie znalezione przez stary oraz nowy program (są prawie identyczne, ale obiecujemy, że ten rysunek to nie oszustwo).
+
+\begin{figure}\centering
+\subfloat[stary program]{\includegraphics[width=5cm,keepaspectratio=true]{./speedy/old-match.png}}\hspace{1mm}
+\subfloat[nowy program]{\includegraphics[width=5cm,keepaspectratio=true]{./speedy/new-match.png}}\hspace{1mm}
+\caption{Porównanie dopasowań starego i nowego programu}{\label{speedy}}
+\end{figure}
+
 \section{Prace nad mozaikami}
 
 Przez \textit{mozaikę} rozumiemy obrazek będący sklejeniem kilku (najczęściej czterech) obrazów podstawowych.
@@ -218,7 +236,7 @@ geom/4star.png: -26.052204
 geom/arch.png: -30.556473
 geom/5star.png: -37.949917
 \end{verbatim}
-Rysunki \ref{test1-pics} pokazują, że istotnie program skutecznie rozpoznaje znane obrazy oraz poprawnie znajduje dopasowania obrazów ,,podobnych''. Kwadrat poprawnie dopasował się
+Rysunek \ref{test1-pics} pokazuje, że istotnie program skutecznie rozpoznaje znane obrazy oraz poprawnie znajduje dopasowania obrazów ,,podobnych''. Kwadrat poprawnie dopasował się
 do kwadratu, okrąg niestety także do kwadratu, wynika to z (zamierzonej) niedoskonałości obu rysunków. Podobnie niewielką odległość okazały się mieć krzyż oraz czterolistna koniczyna
 (zgodnie z oczekiwaniami) oraz trójkąt i ,,domek'' (podobny do trójkąta). Pozostałe figury mają niską funkcję celu, zatem możemy stwierdzić, że program (poprawnie) nie odnalazł ich
 na mozaice.
