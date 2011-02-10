@@ -111,7 +111,7 @@ przekątnej prostokąta zawierającego wszystkie przekształcone punkty obrazka 
 lecz obliczenie tej wielkości jest niebanalne.
 
 \paragraph{Przeszkoda 3: bagatelizacja małych błędów}
-Okazuje się, że nawet w przypadku nawet niemal identycznych obrazków, ich POI nie będą idealnie się pokrywały. Wynika to z między innymi z specyfiki algorytmu oceny
+Okazuje się, że nawet w przypadku nawet niemal identycznych obrazków ich POI nie będą idealnie się pokrywały. Wynika to między innymi ze specyfiki algorytmu oceny
 ,,ciekawości'' pikseli, który nie jest niezmienniczy względem obrotów i skalowań, jak również ze znacznych trudności z znalezieniem perfekcyjnego dopasowania przy
 użyciu algorytmów ewolucyjnych. Chcemy zatem nazwać dopasowanie dobrym, jeżeli odległość między POI z bazy, a POI z zapytania jest rzędu wielkości średniej odległości
 POI w zapytaniu. Można to sobie wyobrazić w następujący sposób: rozpatrzmy obraz z ostrą krawędzią. Punkty charakterystyczne na owej krawędzi rozmieszczone będą
@@ -124,7 +124,7 @@ zrobić to raz, gdyż obrazek z zapytania nie zmienia sie). Następnie, jeżeli 
 owej średniej odległości, funkcja jest liniowa, jeżeli zaś przekracza -- sześcienna. Formalniej, niech $\mathrm{avg}_t$ będzie średnią odległością między POI obrazka
 z zapytania, zaś $d$ odległością euklidesową rozpatrywanych POI. Wówczas odległość użyta do obliczania funkcji celu wyraża się wzorem:
 \[ d' = \begin{cases}
-	    d & \text{jeżeli } d_0 < \mathrm{avg}_t / 2 \\
+	    d & \text{jeżeli } d < \mathrm{avg}_t / 2 \\
 	    d^3 / 4\mathrm{avg}_t^2 & \text{w przeciwnym wypadku}
 	 \end{cases} \]
 Współczynnik $1 / 4\mathrm{avg}_t^2$ zapewnia ciągłość funkcji w punkcie $d$.
