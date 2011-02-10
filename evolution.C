@@ -882,7 +882,6 @@ Agent Population::evolve()
 
     Timer totalEvolutionTime(CLOCK_PROCESS_CPUTIME_ID);
     totalEvolutionTime.start();
-    float ctime = .0f;
     
     globalEvolutionTmr.resume();
     for(generationNumber = 1; ; generationNumber++)
