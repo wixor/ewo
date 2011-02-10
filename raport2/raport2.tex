@@ -129,19 +129,18 @@ z zapytania, zaś $d$ odległością euklidesową rozpatrywanych POI. Wówczas o
 	 \end{cases} \]
 Współczynnik $1 / 4\mathrm{avg}_t^2$ zapewnia ciągłość funkcji w punkcie $d$.
 
-\paragraph{przeszkoda 4: im gęściej, tym łatwiej coś dla siebie znaleźć}
-To jest główny mankament algorytmu. Jeżeli mozaika z zapytania składa się z obrazków istotnie różniących się skupieniem POI 
-(na przykład większego i mniejszego lub bardziej kanciastego oraz mniej), mamy znacznie większą szansę, że obrazek bazowy dopasuje się do pewnych punktów z fragmentu, 
-na którym ich jest po prostu więcej w jednym miejscu.
-
-Pojawiło się kilka pomysłów na zapobieżenie tego problemu. Podstawowym z nich był powrót do koncepcji symetrycznej odległości, czyli sumy odległości jednego od drugiego oraz w drugą stronę.
-Oczywiście, nie możemy zrobić tego tak jak wcześniej, gdyż punktów spoza interesującego nas fragmentu nie mamy zamiaru dopasowywać nigdzie -- powinny zostać niewykorzystane.
-Tak więc naturalnym jest, by wziąć tylko te punkty z zapytania, które leżą ,,pod'' prostokątem rozpinanym przez POI z obrazka bazowego. Niestety, to rozwiązanie okazało się nie dawać 
-oczekiwanych rezultatów.
-
-Problem pozostał niestety nierozwiązany, jednak nie występuje w przypadku prostych testów.
+\paragraph{Przeszkoda 4: wszechstronne kształty}
+Problem ten jest głównym mankamentem algorytmu. Okazuje się, że istnieją kształty podobne do wielu kształtów jednocześnie. Przykładowo ogonek wisienki jest podobny do
+krawędzi banana, zaś jej ciało dobrze dopasuje się na przykład do pomarańczy. Okazuje się, że nietrywialne kształty często ściągają do siebie bardzo wiele dopasowań;
+nawet jeżeli nie są to dopasowania bardzo dobre, to algorytm znajduje je, gdyż są proste.
+Pojawiło się kilka pomysłów na wyeliminowanie tego problemu. Najbardziej obiecującym z nich był powrót do koncepcji symetrycznej odległości, czyli sumy odległości z obrazka bazowego
+do zapytania i odwrotnie. Oczywiście ze względu na opisane wcześniej komplikacje, wymagane byłyby zmiany; możnaby na przykład dopasowywać cały obrazek bazowy do tego fragmentu obrazka
+z zapytania, który leży bezpośrednio pod nim. Innym podejściem byłoby dodanie do osobnika maski bitowej oznaczającej, które punkty z zapytania staramy się dopasować. W przypadku prostych
+mozaik możnaby wręcz zastosować osobny algorytm do podzielenia obrazu na części, a następnie dla każdej z znalezionych części uruchomić algorytm dopasowujący pojedyńcze obrazki.
+Sprawdziliśmy kilka obiecująco brzmiących rozwiązań, jednak żadne z nich nie sprawdziło się w praktyce. Na szczęście problem ten nie manifestuje się w przypadku prostych testów.
 
 \section{Testy moizaikowe}
+
 \paragraph{wpływ ulepszeń na wyniki}
 Dzięki powyższym ulepszeniom udało się zmusić nasz algorytm do działania na niektórych, prostszych, mozaikach. W szczególności, dobrze działają mozaiki złożone z prostych figur geometrycznych,
 jednakże z bardziej skomplikowanymi kształtami program sobie nie radzi. W szczególności, niewypałem okazały się próby użycia go do mozaik owocowych a także z cyframi.
