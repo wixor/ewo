@@ -22,7 +22,7 @@ skomplikowanych obrazków, takich jak krótkie słowa i owoce. Wadą dotychczaso
 Ten projekt rozszerza dotychczasowe podejście w dwóch kierunkach. Po pierwsze, postanowiliśmy przyspieszyć program tak, aby osiągnąć wydajność dającą nadzieje na zastosowania praktyczne.
 Po drugie, staraliśmy się uogólnić algorytm tak, aby był zdolny do rozpoznawania fragmentów obrazów, czyli znajdowania znanych obiektów z bazy na mozaikach.
 
-W wyniku realizacji projektu powstały dwa programy. Jeden jest ograniczony do rozpoznawania pojedyńczych obrazów tak, jak było to w poprzedniej części projektu, zawiera jednak znaczne
+W wyniku realizacji projektu powstały dwa programy. Jeden jest ograniczony do rozpoznawania pojedynczych obrazów tak, jak było to w poprzedniej części projektu, zawiera jednak znaczne
 usprawnienia wydajnościowe. Drugi program jest rozszerzony o rozpoznawanie mozaik, kosztem istotnie większego czasu działania.
 
 \section{Wyszukiwania najbliższych punktów}
@@ -31,7 +31,7 @@ Głównym kosztem obliczeniowym algorytmu jest ewaluacja osobników. W celu jej 
 moc obliczeniową procesora. Jako, że ewaluacja każdego osobnika jest niezależnym zadaniem, w celu uzyskania dalszych przyspieszeń można zastosować procesory masowo równoległe, takie
 jak procesory graficzne. 
 
-Ewaluacja pojedyńczego osobnika polega, w uproszczeniu, na zadawaniu znacznej ilości pytań postaci ,,jaki punkt w zbiorze $X$ jest najbliższy punktowi $p$''. Kluczową obserwacją okazało
+Ewaluacja pojedynczego osobnika polega, w uproszczeniu, na zadawaniu znacznej ilości pytań postaci ,,jaki punkt w zbiorze $X$ jest najbliższy punktowi $p$''. Kluczową obserwacją okazało
 się, że zbiór $X$ można uczynić stałym (w poprzednim programie zbiór ten był zmienny). W związku z tym przed uruchomieniem właściwej części algorytmu można zastosować preprocessing,
 który następnie umożliwi nam natychmiastowe odpowiadanie na pytania. 
 
@@ -47,10 +47,10 @@ jest wielce użyteczna we właściwej części algorytmu.
 
 Zastosowany algorytm opiera się na algorytmie Dijkstry. Traktujemy obrazek jako graf ważony, a punkty z $X$ jako źródła, dla których odległość wynosi $0$. Uruchamiając algorytm Dijkstry
 otrzymujemy rozszerzające się ,,plamy'', które wreszcie pokrywają cały obrazek. Pamiętając, w jakiej kolejności dany piksel był zalewany (tzn. która plama dotarła do niego pierwsza, która
-druga itd) otrzymujemy dla owego piksela kolejne najbliższe mu punkty z $X$. Obliczenia te nie są szybkie, jednak trwają też bardzo długo; wynik jest zapamiętywany podobnie jak wynik
+druga itd) otrzymujemy dla owego piksela kolejne najbliższe mu punkty z $X$. Obliczenia te nie są szybkie, jednak nie trwają też bardzo długo; wynik jest zapamiętywany podobnie jak wynik
 wyszukiwania punktów charakterystycznych. Dzięki temu dla danego obrazka program wykonuje obliczenia jedynie raz, przy następnych uruchomieniach korzysta z wcześniej obliczonych danych.
 
-Przedstawione podejście może nasuwać dwa pytania. Po pierwsze, co, jeżeli chcemy znać najbliższy punkt dla punktu, którego współrzędne nie są całkowite (jest to normalne zjawisko, gdyż
+Przedstawione podejście może nasuwać dwa pytania. Po pierwsze, co należy zrobić, jeżeli chcemy znać najbliższy punkt dla punktu, którego współrzędne nie są całkowite (jest to normalne zjawisko, gdyż
 punkty, o które pytamy są punktami charakterystcznymi przemnożonymi przez macierz, której współczynniki nie muszą być całkowite). Prostym rozwiązaniem tej kwestii jest zaokrąglenie
 współrzędnych. Okazuje się, że nie jest to zły pomysł, gdyż w większości wypadków pytanie o punkt wypada w środku ,,plamy'' i dla wszystkich punktów w otoczeniu odpowiedź jest taka sama.
 Warto również zastanowić się, jakiej odpowiedzi udzielimy dla punktów, które znajdują się na styku plam. Łatwo zauważyć, że punkty takie znajdują się w podobnej odległości od obu źródeł,
@@ -79,12 +79,12 @@ zbieżność do ,,pierwszego lepszego'' minimum.
 
 W związku z powyższą obserwacją, wprowadziliśmy do algorytmu zmienny współczynnik przetrwania. Jego wartość jest opisana wielomianem, którego argumentem jest liczba z zakresu
 $0 \dots 1$, przy czym $0$ oznacza pierwsze, a $1$ ostatnie pokolenie ewolucji (ilość pokoleń jest z góry ustalona). Wielomian ten jest dany w pliku konfiguracyjnym i dla programu
-rozpoznającego pojedyńcze obrazki ma postać $-0.3x + 0.8$, zaś dla programu pracującego z mozaikami $-0.2 + 0.8$. Oznacza to, że wartość współczynnika przetrwania zmienia się
+rozpoznającego pojedyncze obrazki ma postać $-0.3x + 0.8$, zaś dla programu pracującego z mozaikami $-0.2x + 0.8$. Oznacza to, że wartość współczynnika przetrwania zmienia się
 liniowo od $80\%$ do $50\%$ lub $60\%$. Przeprowadziliśmy eksperymenty z wielomianami wyższego stopnia, jednak nie okazały się one wyraźnie lepsze. Obserwując działanie programu
 wyraźnie widać, jak malejący współczynnik przetrwania (widoczny w pasku na dole) ,,ogniskuje'' populacje.
 
 W przypadku programu rozpoznającego mozaiki poszliśmy krok dalej: wprowadziliśmy również zmienne wspólczynniki mutacji. Zadanie tego programu jest istotnie różne od programu
-rozpoznającego pojedyńcze obrazy. Najpierw chcemy starannie przeszukać całą przestrzeń rozwiązań, aby znaleźć ,,ogniska'', to znaczy miejsca, w których znajdują się pod-obrazy mozaiki.
+rozpoznającego pojedyncze obrazy. Najpierw chcemy starannie przeszukać całą przestrzeń rozwiązań, aby znaleźć ,,ogniska'', to znaczy miejsca, w których znajdują się pod-obrazy mozaiki.
 Następnie chcemy koncentrować się na optymalizacji w tych obszarach. Dlatego też na początku współczynniki mutacji są zwiększone, później zaś maleją. Wprowadzenie tej zmiany istotnie
 poprawiło wyniki osiągane przez program.
 
@@ -93,7 +93,7 @@ poprawiło wyniki osiągane przez program.
 Oprócz opisanego powyżej mechanizmu do programu wprowadzono kilka usprawnień wydajnościowych. Okazało się, że znaczną (zdecydowanie zbyt wielką) część czasu procesora zajmowała
 wizualizacja. Mechanizm rysowania został napisany od zera z wykorzystaniem możliwości kart graficznych; przy okazji wizualizacja została udoskonalona, program wyświetla znalezione
 dopasowanie w bardziej czytelny sposób, pokazuje jednocześnie punkty charakterystyczne obu obrazów (które są wszak podstawą działania programu) oraz pewną ilość równomiernie wybranych
-osobników. Całość rysowania zajmuje jedynie ułamki sekund; ekran odświeżany jest co pół sekundy, aby można było coś zauważyć. Program rozpoznający pojedyńcze obrazki działa tak szybko
+osobników. Całość rysowania zajmuje jedynie ułamki sekund; ekran odświeżany jest co pół sekundy, aby można było coś zauważyć. Program rozpoznający pojedyncze obrazki działa tak szybko
 (około 1/5 sekundy na obrazek), że aby pokazać ostateczne dopasowanie algorytm jest zatrzymywany na dwie sekundy po każdym obrazie. Wielkie zasługi w przyspieszeniu działania programu
 ma również opisana powyżej zmienność współczynnika przetrwania. Umożliwiła ona zmniejszenie ilości pokoleń z dwustu do osiemdziesięciu. Ostatecznie dopasowanie jabłka do bazy owoców
 zajmowało staremu programowi 67 sekund, nowy zaś kończy pracę po 3 sekundach (nie wliczając opóźnień). Warto zauważyć, że wynik starego programu jest ,,dopieszczony'', podczas gdy nowy
@@ -161,7 +161,7 @@ punktów do punktów przekształconego obrazka z bazy.
 Odległość między obrazkami jest przeto obliczana jedynie z obrazka z bazy do obrazka z zapytania. Dobrym rozwiązaniem powyższych trudności okazało się zliczanie,
 ile punktów z obrazka bazowego wskazało jako swojego najbliższego sąsiada dany punkt z zapytania.
 
-W programie rozpoznającym pojedyńcze obrazki wprowadzono następnie ograniczenie na maksymalną ilość takich wskazań: mianowicie punkt z zapytania może zostać
+W programie rozpoznającym pojedyncze obrazki wprowadzono następnie ograniczenie na maksymalną ilość takich wskazań: mianowicie punkt z zapytania może zostać
 wskazany przez conajwyżej dwa punkty obrazka z bazy. Jeżeli dla punktu z obrazka bazowego najbliższy znaleziony punkt z zapytania jest już zajęty (został
 wykorzystany dwa razy), znajdowany jest drugi co do odległości punkt, jeżeli on też jest zajęty, znajdowany jest trzeci i tak dalej aż do szóstego. Jeżeli
 żaden z sześciu najbliższych punktów nie jest wolny, punkt z obrazka bazowego pozostaje niedopasowany i osobnikowi przydzielana jest zaporowa kara.
@@ -174,8 +174,8 @@ osobniki próbujące dopasować kilka swoich POI do jednego.
 Dość intuicyjnym faktem jest to, że osobniki, których przekształcenie mocniej ściska obrazek, okazują się być średnio lepsze. Wynika to stąd, że dopasowanie opiera
 się jedynie na punktach charakterystycznych; im mniejszy obrazek, tym mniej owych punktów, a zatem łatwiej wskazać jakikolwiek fragment zapytania, w którym punkty
 rozkładają się podobnie. Ekstremalnym przypadkiem tego problemu jest ściśnięcie obrazka tak bardzo, że zostaje z niego tylko jeden punkt. Oczywiście dopasowanie
-pojedyńczego punktu nie nastręcza żadnych trudności niezależnie od tego, co znajduje się na obrazku z zapytania. Należy zauważyć, że problem ten występuje jedynie
-w programie rozpoznającym mozaiki. Program dopasowujący pojedyńcze obrazki nie próbuje kompensować zmian gęstości POI, zatem próby drastycznego zmniejszenia obrazka
+pojedynczego punktu nie nastręcza żadnych trudności niezależnie od tego, co znajduje się na obrazku z zapytania. Należy zauważyć, że problem ten występuje jedynie
+w programie rozpoznającym mozaiki. Program dopasowujący pojedyncze obrazki nie próbuje kompensować zmian gęstości POI, zatem próby drastycznego zmniejszenia obrazka
 powodują powstanie ogromnego zagęszczenia POI, które nie daje się dobrze dopasować według reguł opisanych powyżej lub otrzymuje wielkie kary z względów opisanych poniżej.
 
 Zastosowane rozwiązanie polega na wprowadzeniu do funkcji celu ,,rozpiętości'' obrazka. Dzieląc wartość funkcji celu przez ,,rozpiętość'' przekształconego obrazka z 
@@ -192,10 +192,10 @@ dość równomiernie (aby to sprawdzić, wystarczy uruchomić któryś z przykł
 z punktami z zapytania; wystarczy nam jedynie, aby między każdymi dwoma punktami z zapytania znalazł się jakiś punkt z bazy (czyli, aby punkty z bazy również były
 rozmieszczone równomiernie wzdłuż rozpatrywanej krawędzi).
 
-Aby osiągnąć ten efekt, wprowadzamy nieliniową funkcję odległości POI. Najpierw obliczamy średnią odległość między punktami charakterystycznymi z zapytania (wystarczy
-zrobić to raz, gdyż obrazek z zapytania nie zmienia sie). Następnie, jeżeli znaleziona odległość POI bazowego od najbliższego mu POI z zapytania nie przekracza połowy
-owej średniej odległości, funkcja jest liniowa, jeżeli zaś przekracza -- sześcienna. Formalniej, niech $\mathrm{avg}_t$ będzie średnią odległością między POI obrazka
-z zapytania, zaś $d$ odległością euklidesową rozpatrywanych POI. Wówczas odległość użyta do obliczania funkcji celu wyraża się wzorem:
+Aby osiągnąć ten efekt, wprowadzamy nieliniową funkcję odległości POI. Najpierw obliczamy średnią odległość między danym punktem charakterystycznym z zapytania a najbliższym mu z tego zbioru
+(wystarczy zrobić to raz, gdyż obrazek z zapytania nie zmienia sie). Następnie, jeżeli znaleziona odległość POI bazowego od najbliższego mu POI z zapytania nie przekracza połowy
+owej średniej odległości, funkcja jest liniowa, jeżeli zaś przekracza -- sześcienna. Formalniej, niech $\mathrm{avg}_t$ będzie średnią odległością POI obrazka 
+z zapytania od nabliższego mu POI, zaś $d$ odległością euklidesową rozpatrywanych POI. Wówczas odległość użyta do obliczania funkcji celu wyraża się wzorem:
 \[ d' = \begin{cases}
 	    d & \text{jeżeli } d < \mathrm{avg}_t / 2 \\
 	    d^3 / 4\mathrm{avg}_t^2 & \text{w przeciwnym wypadku}
@@ -209,7 +209,7 @@ nawet jeżeli nie są to dopasowania bardzo dobre, to algorytm znajduje je, gdy�
 Pojawiło się kilka pomysłów na wyeliminowanie tego problemu. Najbardziej obiecującym z nich był powrót do koncepcji symetrycznej odległości, czyli sumy odległości z obrazka bazowego
 do zapytania i odwrotnie. Oczywiście ze względu na opisane wcześniej komplikacje, wymagane byłyby zmiany; możnaby na przykład dopasowywać cały obrazek bazowy do tego fragmentu obrazka
 z zapytania, który leży bezpośrednio pod nim. Innym podejściem byłoby dodanie do osobnika maski bitowej oznaczającej, które punkty z zapytania staramy się dopasować. W przypadku prostych
-mozaik możnaby wręcz zastosować osobny algorytm do podzielenia obrazu na części, a następnie dla każdej z znalezionych części uruchomić algorytm dopasowujący pojedyńcze obrazki.
+mozaik możnaby wręcz zastosować osobny algorytm do podzielenia obrazu na części, a następnie dla każdej z znalezionych części uruchomić algorytm dopasowujący pojedyncze obrazki.
 Sprawdziliśmy kilka obiecująco brzmiących rozwiązań, jednak żadne z nich nie sprawdziło się w praktyce. Na szczęście problem ten nie manifestuje się w przypadku prostych testów.
 
 \section{Testy moizaikowe}
