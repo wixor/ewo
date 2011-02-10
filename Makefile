@@ -4,14 +4,16 @@ CFLAGS := -O3 -g -pthread -Wall -march=native -msse -msse2 -mfpmath=sse -std=c99
 CXXFLAGS := -O3 -g -pthread -Wno-unused-result -Wall -ffast-math -march=native -msse -msse2 -mfpmath=sse $(shell pkg-config --cflags cairo)
 LDFLAGS := -lm -pthread -ffast-math $(shell pkg-config --libs cairo gdk-pixbuf-2.0)
 
-SRCS := evolution.C poi.C image.c config.C gui.C gui-gtk.c util.C \
+SRCS := evolution.C evosingle.C \
+	    poi.C image.c config.C gui.C gui-gtk.c util.C \
 		poi-test.C
 
 image.o: CFLAGS += $(shell pkg-config --cflags gdk-pixbuf-2.0)
 gui-gtk.o: CFLAGS += $(shell pkg-config --cflags gtk+-2.0)
-evolution poi-test gui-example: LDFLAGS += $(shell pkg-config --libs gtk+-2.0)
+evolution evosingle poi-test gui-example: LDFLAGS += $(shell pkg-config --libs gtk+-2.0)
 
 evolution: evolution.o poi.o gui.o gui-gtk.o util.o image.o config.o
+evosingle: evosingle.o poi.o gui.o gui-gtk.o util.o image.o config.o
 poi-test: poi-test.o poi.o image.o util.o gui.o gui-gtk.o
 
 %: %.o
