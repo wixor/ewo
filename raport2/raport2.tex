@@ -21,42 +21,53 @@
 \maketitle
 
 Niniejszy projekt jest kontynuacją pracy dotyczącej rozpoznawania obrazów. Wówczas udało nam się osiągnąć dobre wyniki, jeśli chodzi o odróżnianie figur geometrycznych i cyfr, a także bardziej
-skomplikowanych obrazków, takich jak krótkie słowa i owoce. Wadą tamtego algorytmu był przede wszystkim duży czas działania.
+skomplikowanych obrazków, takich jak krótkie słowa i owoce. Wadą dotychczasowego algorytmu był przede wszystkim znaczny czas działania.
 
-W tym projekcie postanowiliśmy rozwinąć nasze podejście w dwóch kierunkach. Po pierwsze, przyspieszyć nasz algorytm, aby miał szansę mieć zastosowanie nie tylko ,,akademickie''.
-Drugim kierunkiem jest natomiast dostosowanie algorytmu do rozpoznawania fragmentów obrazów, czyli znajdowania znanych obiektów na mozaikach.
+Ten projekt rozszerza dotychczasowe podejście w dwóch kierunkach. Po pierwsze, postanowiliśmy przyspieszyć program tak, aby osiągnąć wydajność dającą nadzieje na zastosowania praktyczne.
+Po drugie, staraliśmy się uogólnić algorytm tak, aby był zdolny do rozpoznawania fragmentów obrazów, czyli znajdowania znanych obiektów z bazy na mozaikach.
 
-\section{Szybkie dopasowywanie}
+W wyniku realizacji projektu powstały dwa programy. Jeden jest ograniczony do rozpoznawania pojedyńczych obrazów tak, jak było to w poprzedniej części projektu, zawiera jednak znaczne
+usprawnienia wydajnościowe. Drugi program jest rozszerzony o rozpoznawanie mozaik, kosztem istotnie większego czasu działania.
 
-\section{Mozaiki}
+\section{Przyspieszanie dopasowywania obrazów}
 
-Przez ,,mozaikę'' rozumiem obrazek będący sklejeniem kilku (najczęściej czterech) innych, podstawowych. Przykłady podane są tu: \ref{mosaic}.
+\section{Zmienne parametry ewolucji}
+
+\section{Prace nad mozaikami}
+
+Przez \textit{mozaikę} rozumiemy obrazek będący sklejeniem kilku (najczęściej czterech) obrazów podstawowych (patrz rys. \ref{mosaic}).
 Naszym celem jest rozpoznanie obrazków składowych takiej mozaiki, czyli dopasowanie obrazków z bazy danych do fragmentu zapytania.
-Niestety, algorytm opisany powyżej nie działał dla takich testów. Podstawowym problemem, jaki musieliśmy rozwiązać jest skalowanie zbioru punktów charakterystycznych. 
-Poprzednio bowiem zbiór wybierany był ,,na sztywno'', dopiero potem dokonywane były przekształcenia. Niestety, skutkiem tego była niewspółmierna gęstość POI na obu obrazkach 
-(zapytaniem a bazowym). Rozwiązanie przyszło zatem dość naturalnie -- najpierw dokonujemy przekształcenia, a następnie wybieramy punkty tak, by ich gęstość była porównywalna. 
+Niestety, algorytm badany w pierwszej części projektu nie działał dla takich testów.
 
-Oczywiście, nie przekształcaliśmy całego obrazu, a pewien duży zbiór punktów (mocy rzędu tysiąca), z którego następnie standardowym algorytmem wybieraliśmy POI używane do obliczania funkcji celu.
-Reasumując, pełen algorytm wygląda tak:
+Podstawowym problemem, jaki musieliśmy rozwiązać, jest skalowanie zbioru punktów charakterystycznych. 
+Poprzednio bowiem rozmiar tego zbioru wybierany był ,,na sztywno'', przed wykonaniem jakichkolwiek przekształceń. Niestety, skutkiem tego była niewspółmierna gęstość POI. Jako, że mozaika
+zawiera cztery obrazy, zawiera również cztery razy więcej szczegółów, czyli punktów charakterystycznych. Ustalenie rozmiaru zbioru POI na sztywno powodowało, że POI mozaiki
+były rozmieszczone dużo rzadziej, niż POI obrazu z bazy. Jednocześnie osobniki, które starają się dopasować obraz z bazy poprzez zmniejszenie go, bardzo mocno zagęszczają POI.
+Co gorsza, efekty te kumulują się: rozrzedzenie POI zapytania i zagęszczenie POI obrazka z bazy powoduje, że dopasowanie obrazów nastręcza znaczne trudności.
+
+Zastosowane rozwiązanie wydaje się być dość naturalne. Zmodyfikowaliśmy algorytm wyszukiwania punktów charakterystycznych tak, aby najpierw wyszukiwał pewną z góry zadaną ilość POI na 
+obrazku z zapytania; następnie dla przekształconych obrazów z bazy odpowiadających poszczególnym osobnikiom wybieramy zbiór POI tak, aby ich gęstość była podobna do gęstości punktów w 
+zapytaniu. Niestety, algorytm wyszukujący punkty charakterystyczne na obrazie jest mało wydajny. Na szczęście działa on w dwóch fazach. Główny koszt obliczeniowy wiąże się z 
+określeniem ,,ciekawości'' każdego piksela. Następnie względnie szybko daje się wybrać pewną ilość najlepszych pikseli, dbając o to, aby nie były one zbyt blisko siebie (parametr decydujący o
+dopuszczalnej gęstości POI nazywa się \textit{tabu}). Po modyfikacjach algorytm działa następująco:
 \begin{enumerate}
- \item z obrazka z zapytania wybierz sporo (na przykład tysiąc) kolejno najciekawszych punktów.
- \item dobierz wielkość tabu tak, by po zastosowaniu algorytmu wyboru pozostała ustalona ilość POI (80 --- 150).
- \item z obrazka bazowego wybierz duży zbiór najciekawszych punktów
- \item w momencie ewaluacji zaaplikuj przekształcenie do tego zbioru
- \item po przekształceniu, wybierz mniejszy zbiór POI używając znalezionej wielkości tabu
- \item policz odległość między oboma zbiorami.
+ \item oblicz ,,ciekawość'' dla każdego piksela obrazka z zapytania oraz wybierz wiele (około tysiąca) najciekawszych punktów.
+ \item przefiltruj wybrane punkty tak, aby pozostała ich rozsądna ilość (80 -- 150).
+ \item oblicz ,,ciekawość'' dla każdego piksela obrazka z bazy oraz wybierz wiele (około tysiąca) najciekawszych punktów.
+ \item podczas ewaluacji osobnika, przekształć punkty wybrane w kroku 3 używając macierzy osobnika;
+       następnie z otrzymanego zbioru wybierz punkty tak, aby ich gęstość odpowiadała gęstości punktów wybranych w kroku 2
 \end{enumerate}
 
-Powyższe rozwiązanie okazało się mieć wady i zalety. Podstawową wadą jest trywialne maksimum globalne funkcji celu -- jest to bowiem obrazek ściśnięty do punktu bądź prostej. 
-Jest to w pewnym sensie intuicyjny fakt, skłonił nas jednak do bardziej precyzyjnego sformułowania pojęcia ,,podobieństwa''. 
+Powyższe rozwiązanie okazało się mieć wady i zalety. Podstawową wadą jest trywialne maksimum globalne funkcji celu. Jeżeli bowiem ściśnie się obrazek z bazy danych, wszystkie punkty wybrane
+w kroku 3 przejdą na bardzo niewielki obszar; następnie filtrowanie z kroku 4 pozostawi jeden lub dwa punkty. W takim przypadku wystarczy, że punkty te znajdą się niedaleko jakiegokolwiek
+POI zapytania. Efekt ten zmusił skłonił nas do sformułowania bardziej wyrafinowanego pojęcia ,,podobieństwa''. 
 
 \subsection{Podobieństwo: definicja}
 Dwa obrazki $O_1$, $O_2$ są podobne, jeżeli istnieje przekształcenie afiniczne $F$, dla którego odległość POI obrazków $O_1$, $F(O_2)$ jest relatywnie mała.
-Ponadto $F$ oraz $F^{-1}$ skalują co najwyżej czterokrotnie oraz ściskają dwukrotnie, gdzie skalowanie definiujemy:
+Ponadto wymagamy, aby $F$ oraz $F^{-1}$ skalowały co najwyżej czterokrotnie oraz ściskały conajwyżej dwukrotnie, gdzie skalowanie definiujemy jako
 \[ s_f = \max_{\vec x \in R^2} \| f(\vec x) \| / \| \vec x \| \]
-zaś ściskanie:
+zaś ściskanie jako
 \[ c_f = \max_{\vec x, \vec y \in R^2, \vec x \bot \vec y} \| f(\vec x) \| / \| f(\vec y) \| \]
-
 W definicji pozostaje jeszcze jedna rzecz nieuściślona -- jest nią pojęcie odległości POI dwóch obrazków. Pamiętając o tym, że traktujemy POI obrazka jako zbiór (równorzędnych) punktów, 
 musimy określić (asymetryczną) funkcję odległości jednego zbioru punktów od drugiego.
 W dalszym ciągu umawiamy się, że liczymy odległość punktów z obrazka bazowego do obrazka z zapytania.
