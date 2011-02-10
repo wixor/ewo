@@ -18,50 +18,46 @@
 \date{Wrocław, dnia \today\ r.}
 
 \begin{document}
+\maketitle
 
-\section{Wstęp}
 Niniejszy projekt jest kontynuacją pracy dotyczącej rozpoznawania obrazów. Wówczas udało nam się osiągnąć dobre wyniki, jeśli chodzi o odróżnianie figur geometrycznych i cyfr, a także bardziej
 skomplikowanych obrazków, takich jak krótkie słowa i owoce. Wadą tamtego algorytmu był przede wszystkim duży czas działania.
 
-W tym projekcie postanowiliśmy rozwinąć nasze podejście w dwóch kierunkach. Po pierwsze, przyspieszyć nasz algorytm, aby miał szansę mieć zastosowanie nie tylko ``akademickie''.
+W tym projekcie postanowiliśmy rozwinąć nasze podejście w dwóch kierunkach. Po pierwsze, przyspieszyć nasz algorytm, aby miał szansę mieć zastosowanie nie tylko ,,akademickie''.
 Drugim kierunkiem jest natomiast dostosowanie algorytmu do rozpoznawania fragmentów obrazów, czyli znajdowania znanych obiektów na mozaikach.
 
 \section{Szybkie dopasowywanie}
 
 \section{Mozaiki}
 
-Przez ``mozaikę'' rozumiem obrazek będący sklejeniem kilku (najczęściej czterech) innych, podstawowych. Przykłady podane są tu: \ref{mosaic}.
+Przez ,,mozaikę'' rozumiem obrazek będący sklejeniem kilku (najczęściej czterech) innych, podstawowych. Przykłady podane są tu: \ref{mosaic}.
 Naszym celem jest rozpoznanie obrazków składowych takiej mozaiki, czyli dopasowanie obrazków z bazy danych do fragmentu zapytania.
 Niestety, algorytm opisany powyżej nie działał dla takich testów. Podstawowym problemem, jaki musieliśmy rozwiązać jest skalowanie zbioru punktów charakterystycznych. 
-Poprzednio bowiem zbiór wybierany był ``na sztywno'', dopiero potem dokonywane były przekształcenia. Niestety, skutkiem tego była niewspółmierna gęstość POI na obu obrazkach 
-(zapytaniem a bazowym). Rozwiązanie przyszło zatem dość naturalnie - najpierw dokonujemy przekształcenia, a następnie wybieramy punkty tak, by ich gęstość była porównywalna. 
+Poprzednio bowiem zbiór wybierany był ,,na sztywno'', dopiero potem dokonywane były przekształcenia. Niestety, skutkiem tego była niewspółmierna gęstość POI na obu obrazkach 
+(zapytaniem a bazowym). Rozwiązanie przyszło zatem dość naturalnie -- najpierw dokonujemy przekształcenia, a następnie wybieramy punkty tak, by ich gęstość była porównywalna. 
 
 Oczywiście, nie przekształcaliśmy całego obrazu, a pewien duży zbiór punktów (mocy rzędu tysiąca), z którego następnie standardowym algorytmem wybieraliśmy POI używane do obliczania funkcji celu.
 Reasumując, pełen algorytm wygląda tak:
 \begin{enumerate}
  \item z obrazka z zapytania wybierz sporo (na przykład tysiąc) kolejno najciekawszych punktów.
- \item dobierz wielkość tabu tak, by po zastosowaniu algorytmu wyboru pozostała ustalona ilość POI (80 - 150).
+ \item dobierz wielkość tabu tak, by po zastosowaniu algorytmu wyboru pozostała ustalona ilość POI (80 --- 150).
  \item z obrazka bazowego wybierz duży zbiór najciekawszych punktów
  \item w momencie ewaluacji zaaplikuj przekształcenie do tego zbioru
  \item po przekształceniu, wybierz mniejszy zbiór POI używając znalezionej wielkości tabu
  \item policz odległość między oboma zbiorami.
 \end{enumerate}
 
-Powyższe rozwiązanie okazało się mieć wady i zalety. Podstawową wadą jest trywialne maksimum globalne funkcji celu - jest to bowiem obrazek ściśnięty do punktu bądź prostej. 
-Jest to w pewnym sensie intuicyjny fakt, skłonił nas jednak do bardziej precyzyjnego sformułowania pojęcia ``podobieństwa''. 
+Powyższe rozwiązanie okazało się mieć wady i zalety. Podstawową wadą jest trywialne maksimum globalne funkcji celu -- jest to bowiem obrazek ściśnięty do punktu bądź prostej. 
+Jest to w pewnym sensie intuicyjny fakt, skłonił nas jednak do bardziej precyzyjnego sformułowania pojęcia ,,podobieństwa''. 
 
 \subsection{Podobieństwo: definicja}
 Dwa obrazki $O_1$, $O_2$ są podobne, jeżeli istnieje przekształcenie afiniczne $F$, dla którego odległość POI obrazków $O_1$, $F(O_2)$ jest relatywnie mała.
 Ponadto $F$ oraz $F^{-1}$ skalują co najwyżej czterokrotnie oraz ściskają dwukrotnie, gdzie skalowanie definiujemy:
-\[
-s_f = max_{x \in R^2} \{ ||f(x)||/||x|| \} 
-\]
+\[ s_f = \max_{\vec x \in R^2} \| f(\vec x) \| / \| \vec x \| \]
 zaś ściskanie:
-\[
-c_f = max_{x,y \in R^2, x \bot y} \{ ||f(x)||/||f(y)|| \}
-\]
+\[ c_f = \max_{\vec x, \vec y \in R^2, \vec x \bot \vec y} \| f(\vec x) \| / \| f(\vec y) \| \]
 
-W definicji pozostaje jeszcze jedna rzecz nieuściślona - jest nią pojęcie odległości POI dwóch obrazków. Pamiętając o tym, że traktujemy POI obrazka jako zbiór (równorzędnych) punktów, 
+W definicji pozostaje jeszcze jedna rzecz nieuściślona -- jest nią pojęcie odległości POI dwóch obrazków. Pamiętając o tym, że traktujemy POI obrazka jako zbiór (równorzędnych) punktów, 
 musimy określić (asymetryczną) funkcję odległości jednego zbioru punktów od drugiego.
 W dalszym ciągu umawiamy się, że liczymy odległość punktów z obrazka bazowego do obrazka z zapytania.
 
@@ -73,34 +69,34 @@ W tym zadaniu leży spora trudność, trzeba bowiem pokonać kilka przeszkód.
 
 \subsection{Problemy związane z nowym algorytmem}
 \paragraph{przeszkoda 1: wiele do jednego}
-Ponieważ punkty mają ustaloną gęstość, od ``bliskich'' sobie obrazków oczekujemy, by ich punkty dopasowywały się ``1-1''. 
+Ponieważ punkty mają ustaloną gęstość, od ,,bliskich'' sobie obrazków oczekujemy, by ich punkty dopasowywały się ,,1-1''. 
 Zatem nie chcemy, by do jednego punktu z zapytania dopasowywanych było wiele punktów bazowych. 
 
 Dobrym rozwiązaniem tej kwestii okazało się policzenie, dla każdego punktu z zapytania, ile punktów bazowych wskazało go jako swojego najbliższego sąsiada. 
 Z tak otrzymanego zbioru liczb naturalnych, liczymy średnią \textbf{niezerowych} wartości, otrzymując liczbę $W$.
-Następnie przemnażamy odległość przez $e^{W-1}$. W ten sposób osobniki, które chciały ``oszukać'', czyli dopasować kilka swoich POI do jednego, dostają za to wysoką karę.
+Następnie przemnażamy odległość przez $e^{W-1}$. W ten sposób osobniki, które chciały ,,oszukać'', czyli dopasować kilka swoich POI do jednego, dostają za to wysoką karę.
 
 
 \paragraph{przeszkoda 2: małe jest lepsze}
 Dość intuicyjnym faktem jest to, że osobniki, których przekształcenie mocniej ściska obrazek, okazują się być średnio lepsze. Wynika to stąd, że im mniejszy obrazek, 
 tym łatwiej dopasować go (całkowicie błędnie) do fragmentu czegoś dużego. 
 
-Na szczęście rozwiązanie znalazło się trywialne - wystarczy podzielić odległość przez rozpiętość obrazka. Wówczas osobniki o przekształceniach z wyższą skalą dostają rekompensatę.
-Teraz z kolei nasuwa się pytanie o słowo ``rozpiętość''. Ponieważ jest to całkowita heurystyka, wystarczającym okazało się wyznaczenie prostokąta zawierającego wszystkie punkty 
+Na szczęście rozwiązanie znalazło się trywialne -- wystarczy podzielić odległość przez rozpiętość obrazka. Wówczas osobniki o przekształceniach z wyższą skalą dostają rekompensatę.
+Teraz z kolei nasuwa się pytanie o słowo ,,rozpiętość''. Ponieważ jest to całkowita heurystyka, wystarczającym okazało się wyznaczenie prostokąta zawierającego wszystkie punkty 
 obrazka bazowego po przekształceniu, a następnie policzeniu długości jego przekątnej.
 
 \paragraph{przeszkoda 3: bagatelizacja dużych błędów}
 Oczywistym jest, że w przypadku nawet niemal identycznych obrazków, ich POI nie będą idealnie się pokrywały. Wynika to z charakterystyki ich wyboru; dopuszczalne jest, by były oddalone
 o odległość o rzędzie wielkości podobnym do odległości między POI na jednym obrazku (czyli mniej więcej średnia wielkość tabu). 
-Bardzo dobrym rozwiązaniem okazało się wprowadzenie niejednorodnej funkcji odległości - jeżeli odległość POI bazowego od najbliższego mu POI z zapytania nie przekracza średniego ``zasięgu''
-POI, funkcja jest liniowa, jeżeli zaś przekracza - sześcienna.
-Formalniej, niech $avg_t$ będzie średnią najkrótszą odległością między POI obrazka z zapytania, zaś $d_0$ realną odległością euklidesową POI dla których chcemy policzyć ``ulepszoną'' odległość.
+Bardzo dobrym rozwiązaniem okazało się wprowadzenie niejednorodnej funkcji odległości -- jeżeli odległość POI bazowego od najbliższego mu POI z zapytania nie przekracza średniego ,,zasięgu''
+POI, funkcja jest liniowa, jeżeli zaś przekracza -- sześcienna.
+Formalniej, niech $\mathrm{avg}_t$ będzie średnią najkrótszą odległością między POI obrazka z zapytania, zaś $d_0$ realną odległością euklidesową POI dla których chcemy policzyć ,,ulepszoną'' odległość.
 Wówczas odległość użyta do obliczania funkcji celu wyraża się wzorem:
-$$d_r = \left\{ \begin{array}{ll}
-                d_0 & \text{jeżeli } d_0 < \frac{avg_t}{2} \\
-		\frac{d_0^3}{4avg_t^2} & \text{w przeciwnym wypadku}
-               \end{array} \right.$$
-Skalowanie tej wartości o kwadrat $avg_t$ ma na celu uciąglenie funkcji.
+\[ d_r = \begin{cases}
+	    d_0 & \text{jeżeli } d_0 < \mathrm{avg}_t / 2 \\
+	    d_0^3 / 4\mathrm{avg}_t^2 & \text{w przeciwnym wypadku}
+	 \end{cases} \]
+Skalowanie tej wartości o kwadrat $\mathrm{avg}_t$ ma na celu uciąglenie funkcji.
 
 \paragraph{przeszkoda 4: im gęściej, tym łatwiej coś dla siebie znaleźć}
 To jest główny mankament algorytmu. Jeżeli mozaika z zapytania składa się z obrazków istotnie różniących się skupieniem POI 
@@ -108,8 +104,8 @@ To jest główny mankament algorytmu. Jeżeli mozaika z zapytania składa się z
 na którym ich jest po prostu więcej w jednym miejscu.
 
 Pojawiło się kilka pomysłów na zapobieżenie tego problemu. Podstawowym z nich był powrót do koncepcji symetrycznej odległości, czyli sumy odległości jednego od drugiego oraz w drugą stronę.
-Oczywiście, nie możemy zrobić tego tak jak wcześniej, gdyż punktów spoza interesującego nas fragmentu nie mamy zamiaru dopasowywać nigdzie - powinny zostać niewykorzystane.
-Tak więc naturalnym jest, by wziąć tylko te punkty z zapytania, które leżą ``pod'' prostokątem rozpinanym przez POI z obrazka bazowego. Niestety, to rozwiązanie okazało się nie dawać 
+Oczywiście, nie możemy zrobić tego tak jak wcześniej, gdyż punktów spoza interesującego nas fragmentu nie mamy zamiaru dopasowywać nigdzie -- powinny zostać niewykorzystane.
+Tak więc naturalnym jest, by wziąć tylko te punkty z zapytania, które leżą ,,pod'' prostokątem rozpinanym przez POI z obrazka bazowego. Niestety, to rozwiązanie okazało się nie dawać 
 oczekiwanych rezultatów.
 
 Problem pozostał niestety nierozwiązany, jednak nie występuje w przypadku prostych testów.
