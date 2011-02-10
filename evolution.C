@@ -115,6 +115,7 @@ static std::vector<float> parseFloatVector(const char *value)
 
         value = end;
     }
+    debug("string %s -> vector: %f %f\n", value, ret[0], ret[1]);
     return ret;
 }
 
@@ -123,6 +124,7 @@ static float eval(float x, const std::vector<float> &polyn)
     float v = 0;
     for(int i=0; i<(int)polyn.size(); i++)
         v = x*v + polyn[i];
+    // debug("%f * (%f, %f) ->  %f\n", x, polyn[0], polyn[1], v);
     return v;
 }
 
@@ -170,6 +172,7 @@ public:
     int originX, originY; /* median of POIs */
     CairoImage raw_ci; /* image for gui */
     CairoImage prox_ci; /* visualization of proximity data */
+    float avgTabu;
 
     static inline Data build(const char *filename, bool setTabuScale = false) {
         Data ret;
@@ -189,7 +192,6 @@ void Data::doBuild(const char *filename, bool setTabuScale /*= false*/)
         if (setTabuScale) {
             float foundTabu = -1.0f;
             sparse = filterPOIs(dense, cfgPOISparseCount, &foundTabu);
-            debug("sparse size. desired: %d, got: %d, setting tabu as %.3f\n", cfgPOISparseCount, sparse.size(), foundTabu);
             cfgPOITabuScale = foundTabu;
         }
         else
@@ -208,10 +210,8 @@ void Data::doBuild(const char *filename, bool setTabuScale /*= false*/)
             if (setTabuScale) {
                 float foundTabu = -1.0f;
                 sparse = filterPOIs(dense, cfgPOISparseCount, &foundTabu);
-                debug("sparse size. desired: %d, got: %d, setting tabu as %.3f\n", cfgPOISparseCount, sparse.size(), foundTabu);
                 cfgPOITabuScale = foundTabu;
                 POIvec sparse2 = filterPOIs(dense, cfgPOICount, cfgPOITabuScale, Matrix());
-                debug("sparse sizes: %d vs %d\n", sparse.size(), sparse2.size());
             }
             else
                 sparse = filterPOIs(dense, cfgPOICount, cfgPOITabuScale, Matrix());
@@ -240,10 +240,22 @@ void Data::doBuild(const char *filename, bool setTabuScale /*= false*/)
             std::sort(v, v+n);
             originY = v[n/2];
         }
-    
+        
         writeCache(filename);
     }
-
+    
+    {
+        /* find average tabu radius */
+        avgTabu = 0;
+        for (int i=0; i<(int)sparse.size(); i++) {
+            float mdist = INF;
+            for (int j=0; j<(int)sparse.size(); j++) 
+                if (j != i)
+                    mdist = std::min(mdist, (sparse[i]-sparse[j]).distsq());
+            avgTabu += sqrtf(mdist) / sparse.size();
+        }
+    }
+        
     info("loaded '%s': %d dense pois, %d sparse pois", filename, dense.size(), sparse.size());
 
     raw_ci = gui_upload(raw);
@@ -264,8 +276,8 @@ uint32_t Data::checksum() const
            (cfgPOICount*100000007) ^
            (cfgProxMapDetail*43066337) ^
            (cfgProxMapEntries*59284223);
-    ret ^= float2u32(cfgPOIThreshold) ^
-           float2u32(cfgPOITabuScale);
+    ret ^= float2u32(cfgPOIThreshold);
+           // float2u32(cfgPOITabuScale);
     for(int i=0; i<(int)cfgPOIScales.size(); i++)
         ret ^= float2u32(cfgPOIScales[i]);
     return ret;
@@ -435,12 +447,8 @@ public:
         drawSilhouettes(ms, known->raw.getWidth(), known->raw.getHeight(), silhouetteColor);
         
         std::vector<Point> ps, psnon;
-        for (int i=0; i<(int)alien->sparse.size(); i++) {
-            if (mask[i])
-                ps.push_back(alien->sparse[i]);
-            else
-                psnon.push_back(alien->sparse[i]);
-        }
+        for (int i=0; i<(int)alien->sparse.size(); i++) 
+            ps.push_back(alien->sparse[i]);
         drawDots(ps, 6, alienColor);
         drawDots(psnon, 6, silhouetteColor);
             
@@ -474,7 +482,6 @@ public:
     float target; /* target function */
     float fitness; /* population-wide fitness factor */
 
-    /*TEST*/std::bitset<256> mask;
     /* agents ordering */
     inline bool operator<(const Agent &A) const {
         return fitness > A.fitness;
@@ -566,13 +573,13 @@ class Population
     inline bool terminationCondition() const;
 
     /* how many specimen will advance to the next generation */
-    inline float getSurvivalRate() const {return eval((generationNumber-1) / (cfgMaxGenerations-1), cfgSurvivalEq); }
+    inline float getSurvivalRate() const {return eval((generationNumber-1.f) / (cfgMaxGenerations-1.f), cfgSurvivalEq); }
     
     /* mutation deviation scaling */
-    inline float getMutationDev() const { return eval((generationNumber-1) / (cfgMaxGenerations-1), cfgMutationDevEq); }
+    inline float getMutationDev() const { return eval((generationNumber-1.f) / (cfgMaxGenerations-1.f), cfgMutationDevEq); }
     
     /* mutation probability scaling */
-    inline float getMutationProp() const { return eval((generationNumber-1) / (cfgMaxGenerations-1), cfgMutationPropEq); }
+    inline float getMutationProp() const { return eval((generationNumber-1.f) / (cfgMaxGenerations-1.f), cfgMutationPropEq); }
 
 public:
     Population(const Data *known, const Data *alien);
@@ -618,23 +625,6 @@ float Population::distance(const Data *base, const POIvec &queryvec, EvaluationJ
     int fullsearches = 0, operations = 0;
     float sum = 0;
     
-    float qspan = 0;
-    {
-        const int TRIES = 20;
-        for (int t=0; t<TRIES; t++) 
-        {
-            int ind = rand()%queryvec.size();
-            float mindist = INF*INF;
-            for (int i=0; i<(int)queryvec.size(); i++)
-                if (i != ind)
-                    mindist = std::min(mindist, (queryvec[ind]-queryvec[i]).distsq());
-            mindist = sqrtf(mindist);
-            qspan += mindist/TRIES;
-        }
-        //debug("qspan = %.4f\n", qspan);
-        assert(qspan > 1e-5);
-    }
-    
     for(int i=0; i<(int)queryvec.size(); i++)
     {
         /* the point we're looking for.
@@ -677,7 +667,7 @@ float Population::distance(const Data *base, const POIvec &queryvec, EvaluationJ
             sum += INF;
         } else {
             cnts[bestidx] ++;
-            sum += (p - base->sparse[bestidx]).disteval(qspan);
+            sum += (p - base->sparse[bestidx]).disteval(base->avgTabu/2.0f);
         }
     }
     int nzeroSum = 0, nzeroCnt = 0;
@@ -695,7 +685,6 @@ float Population::distance(const Data *base, const POIvec &queryvec, EvaluationJ
 
 void Population::EvaluationJob::runOne(Agent *agent)
 {
-#define DEBUG false
     const Data *alien = uplink->alien, *known = uplink->known;
 
     /* for each POI from known image [--- TODO: update ---]
@@ -703,13 +692,14 @@ void Population::EvaluationJob::runOne(Agent *agent)
      * POI can be used at most K times (this is to prevent matching
      * all known POIs with one or two alien POIs). */
 
-    //{
-        /* p ------- q
-         * |       /
-         * |     /
-         * |   /
-         * | /
-         * r           */
+    {
+        /* p ------- q -------
+         * | \     / |
+         * |   \ /   |
+         * |   / \   |
+         * | /     \ |
+         * r ------- s 
+         * |                  */
         /* attempt to cut out too "flattening" agents AND too "resizing" ones */
         Point p = agent->M * Point(0,0),
               q = agent->M * Point(1,0),
@@ -719,42 +709,24 @@ void Population::EvaluationJob::runOne(Agent *agent)
               d2 = (p-r).dist(),
               d3 = (q-r).dist() / 1.41f,
               d4 = (p-s).dist() / 1.41f;
-        float ratioExtrem = max4(
+        float ratioExtrem = std::max(
             std::max(d1/d2, d2/d1),
-            std::max(d1/d3, d3/d1),
-            std::max(d3/d4, d4/d3),
-            std::max(d2/d3, d3/d2));
+            std::max(d3/d4, d4/d3));
         float scaleExtrem = max4(
             std::max(d1, 1.f/d1),
             std::max(d2, 1.f/d2),
             std::max(d4, 1.f/d4),
             std::max(d3, 1.f/d3));
-        if (DEBUG)
-            debug("0 0 -> %.2f %.2f, 0 1 -> %.2f %.2f, 1 0 -> %.2f %.2f. dists: %.3f %.3f %.3f", p.x, p.y, r.x, r.y, q.x, q.y, d1, d2, d3);
-        if(ratioExtrem > 1.5f || scaleExtrem > 3.0f) {
-            // warn("agent has too high ratio or scale: %.3f %.3f\n", ratioExtrem, scaleExtrem);
+        if(ratioExtrem > 1.5f || scaleExtrem > 4.0f) {
             agent->target = -INF;
             return;
         }
-    //}
+    }
         
     POIvec knownsparse = filterPOIs(known->dense, cfgPOICount, cfgPOITabuScale, agent->M);
     if((int)knownsparse.size() < cfgMinPois) {
-        //warn("too little pois found: %d", knownsparse.size());
         agent->target = -INF;
         return ;
-    }
-    
-    agent->mask.reset();
-    FourFloats FF = vectorSpan(knownsparse);
-//    Matrix revM = agent->M.inverse();
-    POIvec activealien;
-    for (int i=0; i<(int)alien->sparse.size(); i++) {
-        POI p = /*revM **/ alien->sparse[i];
-        if (FF.inside(p)) {
-            activealien.push_back(p);
-            agent->mask.set(i);
-        }
     }
     
     /* how about the penalty for too greedy matching ?? 
@@ -764,18 +736,9 @@ void Population::EvaluationJob::runOne(Agent *agent)
         * introduce a penalty for too high average of matched points */
     /* no, no, no, doesn't work! the problem is somewhere else and, unfortunately, i know where */
     
-    float dist1 = distance(alien, knownsparse, this),
-          dist2 = distance(known, activealien, this);
-          
-    if (DEBUG)
-        debug("d=(%.2f,%.2f) s=(%.2f,%.2f) a=%.2f, pois=%d. rextrem = %.2f, sextrem = %.2f. res=%.3f, span=%.2f\n", 
-          agent->dx(),agent->dy(),agent->sx(),agent->sy(),agent->alpha()/M_PI*180.,knownsparse.size(),ratioExtrem,scaleExtrem,dist1,
-          vectorSpanScalar(knownsparse)
-         );
-    
-    // debug("%.2f (%.3f) %.2f (%.3f)\n", dist1, dist1/knownsparse.size(), dist2, dist2/activealien.size());
+    float dist1 = distance(alien, knownsparse, this);
+
     agent->target = -(dist1/* + dist2*/) / (knownsparse.size() /*+ activealien.size()*/);
-    // agent->target = -(dist1 + dist2) / (knownsparse.size() + activealien.size());
     agent->target = std::max(agent->target, -INF);
     
 }
@@ -898,7 +861,7 @@ void Population::deMating(Agent *a, const Agent *p, const Agent *q, const Agent 
 /* this tells us when to stop */
 bool Population::terminationCondition() const
 {
-    if(generationNumber > cfgMaxGenerations)
+    if(generationNumber >= cfgMaxGenerations)
         return true;
 
     return false;
@@ -913,6 +876,8 @@ bool Population::terminationCondition() const
     return max2 >= max1;
 }
     
+    
+float globalEvolutionTime = 0.0f;
 /* --- the so called main loop */
 Agent Population::evolve()
 {
@@ -940,21 +905,20 @@ Agent Population::evolve()
         debug("start generation %d", generationNumber);
         
         evaluate();
-        debug("  evaluation time: %.5f", totalEvolutionTime.end()-ctime); ctime = totalEvolutionTime.end();
         
 
         float survivalRate = getSurvivalRate();
 
-		gui_status("gen: %d, survival: %d%%, best fit: target %.2f fitness %f  |  d=(%.0f,%.0f), s=(%.2f,%.2f), a=%.3f",
+		gui_status("gen: %d | survival: %d%%, mutation prop: %d%%, mutation dev: %d%% | best fit: target %.2f fitness %f",
 			       generationNumber, (int)(survivalRate*100.f),
-				   pop[0].target, pop[0].fitness,
-				   pop[0].dx(),pop[0].dy(),pop[0].sx(),pop[0].sy(),pop[0].alpha()/M_PI*180.0);
+                   (int)(getMutationProp()*100.f),
+                   (int)(getMutationDev()*100.f),
+				   pop[0].target, pop[0].fitness);
 
         bestDS.lock();
         bestDS.ms.clear();
         for(int i=0; i<(int)pop.size(); i+=std::max(1, (int)pop.size()/30))
             bestDS.ms.push_back(pop[i].M);
-        bestDS.mask = pop[0].mask;
         bestDS.unlock();
         
         // debug("  drawing time: %.5f", totalEvolutionTime.end()-ctime); ctime = totalEvolutionTime.end();
@@ -978,21 +942,19 @@ Agent Population::evolve()
                 do ri = roulette(survivors); while (ri == qi || ri == pi);
                 deMating(&pop[i], &pop[pi], &pop[qi], &pop[ri]);
             } else
-                pop[i] = pop[rand()%survivors]; /*CHANGE*/
+                pop[i] = pop[roulette(survivors)]; /*CHANGE*/
             
         // debug("  DE mating time: %.5f", totalEvolutionTime.end()-ctime); ctime = totalEvolutionTime.end();
         
         for(int i=0; i<(int)pop.size(); i++)
             mutation(&pop[i]);
         
-        debug("  evolution operations time: %.5f", totalEvolutionTime.end()-ctime); ctime = totalEvolutionTime.end();
-        
         if(terminationCondition()) break;
     }
-
-    debug("total evolution time: %.3f seconds", totalEvolutionTime.end());
-    // sleep(5);
-    globalEvolutionTmr.pause();
+    
+    globalEvolutionTime += totalEvolutionTime.end();
+    
+    sleep(5);
     
     bestDS.lock(); bestDS.known = bestDS.alien = NULL; bestDS.ms.clear(); bestDS.unlock();
 
@@ -1137,7 +1099,7 @@ int main(int argc, char *argv[])
         knownDS.clear();
     }
     
-    printf("global build time = %.5f\nglobal evolution time = %.5f\n", globalBuildTmr.end(), globalEvolutionTmr.end());
+    debug("evolution took %.3f secs\n", globalEvolutionTime);
     
     /* print out the verdict */
     std::sort(results.begin(), results.end());
