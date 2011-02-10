@@ -39,6 +39,7 @@ Przez \textit{mozaikę} rozumiemy obrazek będący sklejeniem kilku (najczęści
 Naszym celem jest rozpoznanie obrazków składowych takiej mozaiki, czyli dopasowanie obrazków z bazy danych do fragmentu zapytania.
 Niestety, algorytm badany w pierwszej części projektu nie działał dla takich testów.
 
+\subsection{Gęstość zbioru POI}
 Podstawowym problemem, jaki musieliśmy rozwiązać, jest skalowanie zbioru punktów charakterystycznych. 
 Poprzednio bowiem rozmiar tego zbioru wybierany był ,,na sztywno'', przed wykonaniem jakichkolwiek przekształceń. Niestety, skutkiem tego była niewspółmierna gęstość POI. Jako, że mozaika
 zawiera cztery obrazy, zawiera również cztery razy więcej szczegółów, czyli punktów charakterystycznych. Ustalenie rozmiaru zbioru POI na sztywno powodowało, że POI mozaiki
@@ -62,31 +63,39 @@ Powyższe rozwiązanie okazało się mieć wady i zalety. Podstawową wadą jest
 w kroku 3 przejdą na bardzo niewielki obszar; następnie filtrowanie z kroku 4 pozostawi jeden lub dwa punkty. W takim przypadku wystarczy, że punkty te znajdą się niedaleko jakiegokolwiek
 POI zapytania. Efekt ten zmusił skłonił nas do sformułowania bardziej wyrafinowanego pojęcia ,,podobieństwa''. 
 
-\subsection{Podobieństwo: definicja}
+\subsection{Analiza podobieństwa obrazków}
 Dwa obrazki $O_1$, $O_2$ są podobne, jeżeli istnieje przekształcenie afiniczne $F$, dla którego odległość POI obrazków $O_1$, $F(O_2)$ jest relatywnie mała.
 Ponadto wymagamy, aby $F$ oraz $F^{-1}$ skalowały co najwyżej czterokrotnie oraz ściskały conajwyżej dwukrotnie, gdzie skalowanie definiujemy jako
 \[ s_f = \max_{\vec x \in R^2} \| f(\vec x) \| / \| \vec x \| \]
 zaś ściskanie jako
 \[ c_f = \max_{\vec x, \vec y \in R^2, \vec x \bot \vec y} \| f(\vec x) \| / \| f(\vec y) \| \]
-W definicji pozostaje jeszcze jedna rzecz nieuściślona -- jest nią pojęcie odległości POI dwóch obrazków. Pamiętając o tym, że traktujemy POI obrazka jako zbiór (równorzędnych) punktów, 
-musimy określić (asymetryczną) funkcję odległości jednego zbioru punktów od drugiego.
-W dalszym ciągu umawiamy się, że liczymy odległość punktów z obrazka bazowego do obrazka z zapytania.
 
-Do tej pory ogólnym schematem było znalezienie dla każdego punktu z bazowego najbliższy mu punkt w zapytaniu, a następnie policzenie odległości między nimi.
-Wówczas odległość zbiorów była średnią odległością opisaną powyżej.
-Należy jednak określić kilka rzeczy precyzyjniej, gdyż powyższy schemat okazał się niewystarczający.
+W powyższej definicji należy jeszcze uściślić pojęcie odległości POI dwóch obrazków. Pamiętając o tym, że traktujemy POI obrazka jako zbiór (równorzędnych) punktów, 
+musimy określić (asymetryczną) funkcję odległości jednego zbioru punktów od drugiego. W dalszym ciągu umawiamy się, że liczymy odległość punktów z obrazka bazowego do obrazka z zapytania.
+Do tej pory ogólnym schematem było znalezienie dla każdego punktu z przekształconego obrazka z bazy najbliższego mu punktu w zapytaniu, a następnie policzenie odległości między nimi.
+Odległość zbiorów definiowana była jako średnią powyższych odległości. Okazuje się jednak, że takie proste podejście jest niewystarczające.
 
-W tym zadaniu leży spora trudność, trzeba bowiem pokonać kilka przeszkód.
-
-\subsection{Problemy związane z nowym algorytmem}
-\paragraph{przeszkoda 1: wiele do jednego}
+\paragraph{Przeszkoda 1: wiele do jednego}
 Ponieważ punkty mają ustaloną gęstość, od ,,bliskich'' sobie obrazków oczekujemy, by ich punkty dopasowywały się ,,1-1''. 
-Zatem nie chcemy, by do jednego punktu z zapytania dopasowywanych było wiele punktów bazowych. 
+Chcielibyśmy wyeliminować sytuacje, w których do jednego punktu z zapytania dopasowywanych było wiele punktów z obrazka bazowego.
+W pierwotnym programie problem ten rozwiązywany był poprzez liczenie odległości od zapytania do obrazka z bazy oraz od obrazka z bazy do zapytania.
+Podejście to jednak nie ma zastosowania w obecnym projekcie, gdzie do wyszukiwania najbliższych punktów zastosowano diagram Voronoia. Obliczanie tej struktury
+jest kosztowne czasowo, zatem można sobie na to pozwolić jedynie w przypadku obrazka z zapytania, jako że nie ulega on zmianom w czasie. Brak owej struktury dla
+przekształconego obrazka z bazy eliminuje możliwość obliczania odległości z zapytania do obrazka z bazy. Ponadto w programie rozpoznającym fragmenty mozaik liczenie
+owej odległości jest wręcz niemożliwe: celowe jest, aby część punktów z zapytania pozostała niedopasowana, zatem należy się spodziewać wielkich odległości z tych
+punktów do punktów przekształconego obrazka z bazy.
 
-Dobrym rozwiązaniem tej kwestii okazało się policzenie, dla każdego punktu z zapytania, ile punktów bazowych wskazało go jako swojego najbliższego sąsiada. 
-Z tak otrzymanego zbioru liczb naturalnych, liczymy średnią \textbf{niezerowych} wartości, otrzymując liczbę $W$.
-Następnie przemnażamy odległość przez $e^{W-1}$. W ten sposób osobniki, które chciały ,,oszukać'', czyli dopasować kilka swoich POI do jednego, dostają za to wysoką karę.
+Odległość między obrazkami jest przeto obliczana jedynie z obrazka z bazy do obrazka z zapytania. Dobrym rozwiązaniem powyższych trudności okazało się zliczanie,
+ile punktów z obrazka bazowego wskazało jako swojego najbliższego sąsiada dany punkt z zapytania.
 
+W programie rozpoznającym pojedyńcze obrazki wprowadzono następnie ograniczenie na maksymalną ilość takich wskazań: mianowicie punkt z zapytania może zostać
+wskazany przez conajwyżej dwa punkty obrazka z bazy. Jeżeli dla punktu z obrazka bazowego najbliższy znaleziony punkt z zapytania jest już zajęty (został
+wykorzystany dwa razy), znajdowany jest drugi co do odległości punkt, jeżeli on też jest zajęty, znajdowany jest trzeci i tak dalej aż do szóstego. Jeżeli
+żaden z sześciu najbliższych punktów nie jest wolny, punkt z obrazka bazowego pozostaje niedopasowany i osobnikowi przydzielana jest zaporowa kara.
+
+W programie rozpoznającym mozaiki badany jest zbiór liczb naturalnych oznaczających ilość dopasowań do każdego z punktów z zapytania. Obliczana jest średnia
+$W$ niezerowych elementów tego zbioru. Następnie średnia obliczona średnia odległość mnożona jest odległość przez $e^{W-1}$. W ten sposób karane są
+osobniki próbujące dopasować kilka swoich POI do jednego.
 
 \paragraph{przeszkoda 2: małe jest lepsze}
 Dość intuicyjnym faktem jest to, że osobniki, których przekształcenie mocniej ściska obrazek, okazują się być średnio lepsze. Wynika to stąd, że im mniejszy obrazek, 
