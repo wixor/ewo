@@ -145,11 +145,10 @@ class Data
     inline void writeCache(const char *filename) const;
 
     struct cacheHdr {
-        enum { MAGIC = 0xc9981ad4 };
+        enum { MAGIC = 0x3f0dea79 };
         uint32_t magic;
         uint32_t checksum;
         uint32_t poiCount;
-        uint32_t originX, originY;
     };
 
     inline Data() { }
@@ -217,22 +216,6 @@ void Data::doBuild(const char *filename, bool setTabuScale /*= false*/)
             prox.build(sparse);
         }
     
-        {
-            /* find origin */
-            int n = dense.size();
-            float v[n];
-            
-            for(int i=0; i<n; i++)
-                v[i] = dense[i].x;
-            std::sort(v, v+n);
-            originX = v[n/2];
-
-            for(int i=0; i<n; i++)
-                v[i] = dense[i].y;
-            std::sort(v, v+n);
-            originY = v[n/2];
-        }
-    
         writeCache(filename);
     }
 
@@ -240,7 +223,23 @@ void Data::doBuild(const char *filename, bool setTabuScale /*= false*/)
 
     raw_ci = gui_upload(raw);
     prox_ci = gui_upload(prox.visualize());
+    
+    {
+        /* find origin */
+        int n = dense.size();
+        float v[n];
+        
+        for(int i=0; i<n; i++)
+            v[i] = dense[i].x;
+        std::sort(v, v+n);
+        originX = v[n/2];
 
+        for(int i=0; i<n; i++)
+            v[i] = dense[i].y;
+        std::sort(v, v+n);
+        originY = v[n/2];
+    }
+    
     progress(-1);
 }
 
@@ -256,8 +255,7 @@ uint32_t Data::checksum() const
            (cfgPOICount*100000007) ^
            (cfgProxMapDetail*43066337) ^
            (cfgProxMapEntries*59284223);
-    ret ^= float2u32(cfgPOIThreshold) ^
-           float2u32(cfgPOITabuScale);
+    ret ^= float2u32(cfgPOIThreshold);
     for(int i=0; i<(int)cfgPOIScales.size(); i++)
         ret ^= float2u32(cfgPOIScales[i]);
     return ret;
@@ -314,9 +312,6 @@ void Data::readCached(const char *filename)
         throw std::runtime_error("failed to read proximity map");
     }
 
-    originX = hdr.originX;
-    originY = hdr.originY;
-
     fclose(f);
 }
 
@@ -333,8 +328,6 @@ void Data::writeCache(const char *filename) const
     hdr.magic = cacheHdr::MAGIC;
     hdr.checksum = checksum();
     hdr.poiCount = dense.size();
-    hdr.originX = originX;
-    hdr.originY = originY;
 
     int proxsize = prox.getWidth() * prox.getDetail() *
                    prox.getHeight() * prox.getDetail() * 
