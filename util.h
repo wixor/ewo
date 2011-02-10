@@ -84,9 +84,6 @@ public:
         float g = sqrtf(-2.0f * logf(p)) * cosf(2.0f*M_PI*q);
         return g*deviation + mean;
     }
-    static float trigauss(float m1, float d1, float m2, float d2) {
-        return (gaussian(m1,d1) + gaussian(m1+m2,d2) + gaussian(m1-m2,d2))/3.f;
-    }
 };
 
 /* -------------------------------------------------------------------------- */
@@ -254,9 +251,7 @@ class Timer {
     /* real time from the start till now */
     float gettime();
 public:
-    inline Timer(int clock = CLOCK_THREAD_CPUTIME_ID) : clock(clock) {
-        isrunning = false;
-    }
+    inline Timer(int clock = CLOCK_THREAD_CPUTIME_ID) : isrunning(false), clock(clock) { }
     void start();
     void pause();
     void resume();
