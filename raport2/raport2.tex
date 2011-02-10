@@ -270,10 +270,11 @@ geom/arch.png: -5.901488
 geom/4star.png: -13.952413
 geom/5star.png: -31.386328
 \end{verbatim}
-Teraz skupimy się na bardziej interesujących dopasowaniach.
-Bardzo dobrze odnalazł się trójkąt we fragmencie muszki. Koniczyna dopasowała sie bez zarzutu, do muszki także podobne są dwa złączone kółka.
-Natomiast uśmiech okazał się relatywnie podobny do podkowy (łuku). Niestety, nie udało się znaleźć dopasowania domku do domku. 
-Ale nie można być idealnym. Na potwierdzenie słów, przedstawiamy kilka rezultatów działania: \ref{test3-pics}.
+W teście tym widoczne są bardziej wyrafinowane dopasowania. Bardzo dobrze odnalazł się trójkąt we fragmencie muszki (jakkolwiek przykład był banalny, wynik jest szczególnie istotny,
+gdyż wskazuje na możliwość odnajdywania obrazków wewnątrz innych obrazków). Koniczyna dopasowała sie bez zarzutu, do muszki także podobne są dwa złączone kółka (pożądana zdolność
+,,uogólniania'', czy też dopasowywania nieidentycznych obrazków), uśmiech okazał się relatywnie podobny do podkowy (łuku). Niestety, nie udało się znaleźć dopasowania domku do domku
+(chociaż przyznajemy, że znalezione dopasowanie nie jest tragiczne). Warto zwrócić uwagę na wynik gwiazdy pięcioramiennej. Podobne widoki są bardzo częste w pracy z naszym programem;
+jakkolwiek nie istnieje dobre dopasowanie, oczekiwalibyśmy raczej dopasowania do jednego z elementów mozaiki. Rezultaty przedstawia rysunek \ref{test3-pics}.
 
 \begin{figure}\centering
 \subfloat[trójkąt]{\includegraphics[width=5cm,keepaspectratio=true]{./test3/match4.png}}\hspace{1mm}
@@ -284,16 +285,10 @@ Ale nie można być idealnym. Na potwierdzenie słów, przedstawiamy kilka rezul
 \caption{Dopasowania figur do mozaiki, test 2}{\label{test3-pics}}
 \end{figure}
 
-
-Oczywiście, moglibyśmy pokazać więcej chlubnych przykładów działania naszego algorytmu, chcemy jednak zaprezentować testy niedziałające, aby zilustrować przeszkody, które stanęły 
-nam na drodze.
-
-\subsection{Testy z cyframi}
-\paragraph{Test typowy, ale niedziałający: 2, 3, 6}
-W niniejszym teście będziemy starali się rozpoznać co jest na mozaice złożonej z kilku cyfr. Warto wspomnieć, że każdy z elementów mozaiki z osobna dobrze bądź idealnie dopasowuje się do
-pewnego obrazka z bazy danych.
-
-Niestety, żadna z cyfr (2,3,6) nie dopasowała się poprawnie do odpowiedniego fragmentu mozaiki. Rezultaty widać na \ref{test5-pics}. Zaś wyniki numeryczne są następujące:
+\paragraph{Test z cyframi 2, 3, 6}
+Moglibyśmy pokazać więcej przykładów działania naszego algorytmu, chcemy jednak zaprezentować testy niedziałające, aby zilustrować przeszkody, które stanęły nam na drodze.
+W tym teście będziemy starali się rozpoznać mozaikę złożoną z kilku cyfr. Każdy z elementów mozaiki z osobna dobrze bądź idealnie dopasowuje się do pewnego obrazka z bazy danych.
+Niestety, żadna z cyfr 2, 3, 6 nie dopasowała się poprawnie do odpowiedniego fragmentu mozaiki. Rezultaty widać na rysunku \ref{test5-pics}. Wyniki numeryczne są następujące:
 \begin{verbatim}
 digs/2_3.pgm: -1.945461
 digs/5_3.pgm: -2.889184
