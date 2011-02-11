@@ -1,0 +1,14 @@
+Dodałem:
+1. geom/mosaic*
+2. geom/{muszka,cross2,arch2}.png
+3. fruits/mosaic*
+4. digs/mosaic*
+
+Mozaiki geometryczne działają prawie bez zarzutu, można pokazać.
+Mozaiki cyferkowe NIE działają, nie mówiąc o owocowych.
+Moizaikowego programu nie odpalaj na testach innych niż mozaiki, bo tam jakiś syf jest
+
+Evosingle działa na tym co ty wiesz, plus sprawdziłem że 
+1. na testach {muszka,cross2,arch2} daje zadowalające wyniki
+2. na cyferkach na twoją własną odpowiedzialność (zwiększ ilość pokoleń)
+
