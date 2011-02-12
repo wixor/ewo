@@ -6,7 +6,7 @@
 \usepackage{a4wide}
 \usepackage{graphicx}
 \usepackage{subfig}
-\usepackage{wrapfig}
+\usepackage{multirow}
 
 \title{\textbf{Algorytmy ewolucyjne}\\
        {\Large Raport z zadania pierwszego}\\[-1ex]}
@@ -257,7 +257,7 @@ na mozaice.
 \subfloat[podkowa]{\includegraphics[width=5cm,keepaspectratio=true]{./test1/match8.png}}\hspace{1mm}
 \subfloat[4-ro listna koniczyna]{\includegraphics[width=5cm,keepaspectratio=true]{./test1/match9.png}}\hspace{1mm}
 \subfloat[domek]{\includegraphics[width=5cm,keepaspectratio=true]{./test1/match10.png}}\hspace{1mm}
-\caption{Mozaika z figurami (test 1)}{\label{test1-pics}}
+\caption{Mozaika z figurami (\texttt{geom/mosaic1.png})}{\label{test1-pics}}
 \end{figure}
 
 \paragraph{Test drugi: uśmiech, domek, koniczyna, muszka}
@@ -287,7 +287,7 @@ jakkolwiek nie istnieje dobre dopasowanie, oczekiwalibyśmy raczej dopasowania d
 \subfloat[kulki]{\includegraphics[width=5cm,keepaspectratio=true]{./test3/match7.png}}\hspace{1mm}
 \subfloat[domek]{\includegraphics[width=5cm,keepaspectratio=true]{./test3/match10.png}}\hspace{1mm}
 \subfloat[gwiazda 5-cio ramienna]{\includegraphics[width=5cm,keepaspectratio=true]{./test3/match5.png}}
-\caption{Mozaika z figurami (test 2)}{\label{test3-pics}}
+\caption{Mozaika z figurami (\texttt{geom/mosaic3.png})}{\label{test3-pics}}
 \end{figure}
 
 \paragraph{Test z cyframi 2, 3, 6}
@@ -321,7 +321,77 @@ tego maksimum lokalnego -- najprawdopodobniej dobrym rozwiązaniem okazałoby si
 \subfloat[czwórka]{\includegraphics[width=5cm,keepaspectratio=true]{./test5/match5.png}}\hspace{1mm}
 \subfloat[szóstka]{\includegraphics[width=5cm,keepaspectratio=true]{./test5/match7.png}}\hspace{1mm}
 \subfloat[ósemka]{\includegraphics[width=5cm,keepaspectratio=true]{./test5/match10.png}}\hspace{1mm}
-\caption{Mozaika z cyframi}{\label{test5-pics}}
+\caption{Mozaika z cyframi (\texttt{digs/mosaic1.png})}{\label{test5-pics}}
+\end{figure}
+
+\section{Powtarzalność wyników}
+
+\begin{figure}\centering
+\footnotesize
+\include{./results-1/graph}\vspace{-1.2em}
+\include{./results-2/graph}\vspace{-1.2em}
+\include{./results-3/graph}\vspace{.5em}
+\begin{tabular}{|l|ll|ll|ll|}\hline
+          & $E$       & $\sigma$ & $E$       & $\sigma$ & $E$       & $\sigma$ \\ \hline
+triangle1 &  0.247820 & 0.049523 &  1.645350 & 0.300826 &  1.410400 & 0.348985 \\
+square    &  0.577660 & 0.231402 &  3.331020 & 0.624010 &  2.016210 & 0.163243 \\
+circle    &  1.154680 & 0.640052 &  0.780480 & 0.183907 &  3.545210 & 0.569438 \\
+cross     &  2.152610 & 0.558528 &  6.724260 & 0.674194 &  0.550440 & 0.245758 \\
+clover    &  2.956400 & 0.598749 & 18.457290 & 1.613133 &  2.570660 & 0.383632 \\
+house     &  5.105800 & 1.453031 &  2.458250 & 0.548131 &  4.538930 & 0.866171 \\
+4star     & 11.956870 & 1.481512 & 14.383770 & 0.713879 &  8.272040 & 1.412373 \\
+balls     & 16.037650 & 2.846353 & 22.286540 & 2.188666 &  6.102030 & 1.197640 \\
+arch      & 24.902450 & 1.408058 & 15.960360 & 1.228021 & 16.190710 & 1.356077 \\
+5star     & 28.833450 & 1.262338 &  8.893930 & 0.851110 & 12.607730 & 1.629204 \\ \hline
+\end{tabular}
+\normalsize\caption{Analiza powtarzalności działania programu rozpoznającego mozaiki}
+\end{figure}
+
+\begin{figure}\centering
+\footnotesize
+\subfloat[średnia wartość dopasowania]{
+\begin{tabular}{|l|r@{.}lr@{.}lr@{.}lr@{.}lr@{.}lr@{.}lr@{.}lr@{.}lr@{.}l|}\hline
+& \multicolumn{2}{c}{apple}
+& \multicolumn{2}{c}{ban.}
+& \multicolumn{2}{c}{cherries}
+& \multicolumn{2}{c}{cherry2}
+& \multicolumn{2}{c}{oran.}
+& \multicolumn{2}{c}{pap.}
+& \multicolumn{2}{c}{pear1}
+& \multicolumn{2}{c}{pineap.}
+& \multicolumn{2}{c|}{water.}  \\ \hline
+apple      &   9&595 &  19&935 &  30&392 &  51&022 & 12&359 &  14&213 & 19&533 &  25&910 &  20&763 \\
+banana1    &  54&871 &  21&895 &  67&023 &  73&458 & 46&378 &  56&628 & 53&864 &  53&825 &  52&386 \\
+cherries   &  17&154 &  16&418 &   5&928 &  13&898 & 17&853 &  19&547 & 21&050 &  16&092 &  22&080 \\
+cherry2    &  10&837 &  12&908 &  17&629 &   8&085 &  9&976 &  11&872 & 13&388 &  16&092 &  16&167 \\
+orange1    & 138&142 & 121&840 & 210&130 & 183&350 & 13&553 & 100&986 & 95&575 & 146&881 & 121&463 \\
+paprika1   &  25&110 &  35&715 &  54&699 &  71&224 & 12&027 &  11&539 & 17&568 &  57&563 &  32&568 \\
+pear1      &  50&444 &  54&541 & 115&718 &  78&730 & 18&016 &  29&118 & 22&669 &  84&465 &  51&485 \\
+pineapple  &  11&366 &  12&533 &  11&482 &  14&487 & 16&295 &  21&189 & 35&644 &   6&526 &  17&821 \\
+watermelon &  19&421 &  18&792 &  27&788 &  31&200 & 17&739 &  18&651 & 16&957 &  25&228 &  12&332 \\ \hline
+\end{tabular}}\\
+\subfloat[odchylenie standardowe dopasowania]{
+\begin{tabular}{|l|r@{.}lr@{.}lr@{.}lr@{.}lr@{.}lr@{.}lr@{.}lr@{.}lr@{.}l|}\hline
+& \multicolumn{2}{c}{apple}
+& \multicolumn{2}{c}{ban.}
+& \multicolumn{2}{c}{cherries}
+& \multicolumn{2}{c}{cherry2}
+& \multicolumn{2}{c}{oran.}
+& \multicolumn{2}{c}{pap.}
+& \multicolumn{2}{c}{pear1}
+& \multicolumn{2}{c}{pineap.}
+& \multicolumn{2}{c|}{water.}  \\ \hline
+apple      &  7&791 &  6&104 & 13&330 & 10&522 &  3&703 &  6&315 & 21&024 &  3&931 &  8&094 \\
+banana1    & 11&724 & 18&784 &  7&090 & 16&954 &  7&894 & 17&973 & 16&444 &  9&685 & 14&039 \\
+cherries   &  2&099 &  2&779 &  4&128 &  2&151 &  4&721 & 15&638 &  5&240 &  1&162 & 16&559 \\
+cherry2    &  1&002 &  1&748 &  3&173 &  4&802 &  6&367 & 13&270 &  5&371 &  1&480 & 16&305 \\
+orange1    & 16&024 & 16&529 & 20&256 & 25&631 & 15&900 & 22&365 & 16&802 & 18&615 & 18&311 \\
+paprika1   &  5&599 &  6&649 & 34&263 & 27&543 &  2&863 &  6&952 &  6&186 & 15&494 &  9&800 \\
+pear1      & 14&638 & 18&108 & 20&780 & 14&137 &  4&766 & 11&422 & 23&841 & 24&650 & 16&559 \\
+pineapple  &  1&636 &  7&181 &  0&639 &  2&747 & 17&834 & 27&527 & 38&748 &  2&774 & 18&371 \\
+watermelon &  2&530 &  3&902 &  6&983 &  7&419 &  2&743 &  3&044 &  3&404 &  4&612 &  5&850 \\ \hline
+\end{tabular}}
+\normalsize\caption{Analiza powtarzalności działania programu rozpoznającego pojedyncze obrazki}
 \end{figure}
 
 \section{Uwagi implementacyjne}
