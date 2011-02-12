@@ -326,26 +326,15 @@ tego maksimum lokalnego -- najprawdopodobniej dobrym rozwiązaniem okazałoby si
 
 \section{Powtarzalność wyników}
 
-\begin{figure}\centering
-\footnotesize
-\include{./results-1/graph}\vspace{-1.2em}
-\include{./results-2/graph}\vspace{-1.2em}
-\include{./results-3/graph}\vspace{.5em}
-\begin{tabular}{|l|ll|ll|ll|}\hline
-          & $E$       & $\sigma$ & $E$       & $\sigma$ & $E$       & $\sigma$ \\ \hline
-triangle1 &  0.247820 & 0.049523 &  1.645350 & 0.300826 &  1.410400 & 0.348985 \\
-square    &  0.577660 & 0.231402 &  3.331020 & 0.624010 &  2.016210 & 0.163243 \\
-circle    &  1.154680 & 0.640052 &  0.780480 & 0.183907 &  3.545210 & 0.569438 \\
-cross     &  2.152610 & 0.558528 &  6.724260 & 0.674194 &  0.550440 & 0.245758 \\
-clover    &  2.956400 & 0.598749 & 18.457290 & 1.613133 &  2.570660 & 0.383632 \\
-house     &  5.105800 & 1.453031 &  2.458250 & 0.548131 &  4.538930 & 0.866171 \\
-4star     & 11.956870 & 1.481512 & 14.383770 & 0.713879 &  8.272040 & 1.412373 \\
-balls     & 16.037650 & 2.846353 & 22.286540 & 2.188666 &  6.102030 & 1.197640 \\
-arch      & 24.902450 & 1.408058 & 15.960360 & 1.228021 & 16.190710 & 1.356077 \\
-5star     & 28.833450 & 1.262338 &  8.893930 & 0.851110 & 12.607730 & 1.629204 \\ \hline
-\end{tabular}
-\normalsize\caption{Analiza powtarzalności działania programu rozpoznającego mozaiki}
-\end{figure}
+\paragraph{Pojedyncze obrazki} Wyniki eksperymentów z programem rozpoznającym pojedyncze obrazki zebrano na rysunku \ref{single-results} (w tabeli pominięto znak minus przy
+wartości funkcji celu; mniejsze wartości oznaczają lepsze dopasowanie). Eksperymenty polegały na wykonaniu pięćdziesiąt razy porównania każdej pary obrazów z bazy owoców.
+Wiersze tabeli odpowiadają obrazkom podanym jako zapytanie, kolumny -- obrazkom wziętym z bazy danych. Jak widać, wyniki są poprawne (jedynie w przypadku gruszki program myli
+się i stwierdza, że jest najbardziej podobna do pomarańczy). W większości wypadków widać również wyraźną różnicę między dopasowaniami poprawnymi a błędnymi (dobrymi przykładami
+są jabłko, wisienki, ekstremalnym -- pomarańcza). Nieintuicyjnym może wydawać się fakt, że tabela nie jest symetryczna. Jest to jednak efekt oczekiawny, gdyż funkcja celu nie
+jest symetryczna. Bardzo dobrze widać to na przykładzie pomarańczy, która jest niemal idealnym kołem. Gdy pomarańcza występuje jako obrazek z bazy, otrzymywane dopasowania są
+bardzo dobre, natomiast gdy pomarańcza jest obrazkiem z zapytania, dopasowania inne niż do samej siebie mają olbrzymie wartości błędu. Jest tak, gdyż łatwo jest znaleźć okrągły
+kształt w większości z owoców, zatem odległość od pomarańczy do zapytania jest niewielka. Z drugiej strony bardzo trudno jest przekształcić nieregularne kształty tak, aby wszystkie
+ich punkty leżały na okręgu; dlatego odległość od innych owoców do pomarańczy jest znaczna.
 
 \begin{figure}\centering
 \footnotesize
@@ -391,7 +380,40 @@ pear1      & 14&638 & 18&108 & 20&780 & 14&137 &  4&766 & 11&422 & 23&841 & 24&6
 pineapple  &  1&636 &  7&181 &  0&639 &  2&747 & 17&834 & 27&527 & 38&748 &  2&774 & 18&371 \\
 watermelon &  2&530 &  3&902 &  6&983 &  7&419 &  2&743 &  3&044 &  3&404 &  4&612 &  5&850 \\ \hline
 \end{tabular}}
-\normalsize\caption{Analiza powtarzalności działania programu rozpoznającego pojedyncze obrazki}
+\normalsize\caption{Analiza powtarzalności działania programu rozpoznającego pojedyncze obrazki}\label{single-results}
+\end{figure}
+
+\paragraph{Mozaiki} Wyniki eksperymentów z programem rozpoznającym mozaiki zebrano na rysunku \ref{mosaic-results} (ponownie pominięto znak minus przy wartości funkcji celu; mniejsze
+wartości oznaczają lepsze dopasowanie). Eksperymenty polegały na wykonaniu dziesięciu zapytań dla każdej z trzech mozaik geometrycznych. Na pierwszej mozaice znajdują się kwadrat, koło,
+trójkąt i krzyż, na drugiej: zdeformowane koło, gwiazda sześcioramienna, inny trójkąt i prostokąt, na trzeciej: złączone trójkąty, uśmiech (łuk), domek i koniczynka. Obrazki znajdujące
+się na mozaikach nie są identyczne z obrazkami z bazy danych (wszystkie zostały wykonane ręcznie). Wykresy przedstawiają jakość znalezionych dopasowań dla każdego z dziesięciu obrazków z bazy. 
+Tabela przedstawia wartości średniej jakości dopasowania oraz odchylenia standardowego dla każdej z trzech mozaik. Wynik pierwszej mozaiki jest bardzo dobry: wszystkie elementy zostały
+rozpoznane, wartości dopasowań są dosć bliskie przy każdym uruchomieniu. Koniczynka dopasowała się bardzo dobrze, choć nie znajduje się na obrazku; jest to jednak poprawny wynik, ponieważ
+jest ona bardzo podobna do krzyża. Domek również osiągał nienajgorsze wyniki, gdyż udaje się go dopasować do kwadratu. Druga mozaika również nie wypadła źle; obrazki na niej zawarte są
+istotnie róże od tych z bazy danych. Dopasowania koła i trójkąta są doskonałe. Domek i kwadrat dopasowują się do prostokąta (choć oczekiwaliśmy zdecydowanie lepszych wyników kwadratu).
+Krzyż i gwiazda pięcioramienna wpasowują się w gwiazdę sześcioramienną. W mozaice trzeciej doskonale działają trójkąt i krzyż, który uzyskuje nawet dużo lepsze wyniki niż koniczynka.
+Kwadrat i koło starają się przypominać domek, niestety sam domek rzadko dopasowuje się poprawnie i szuka raczej miejsca wśród dwóch trójkątów. Zawiedliśmy się jedynie na łuku, który
+zajmuje ostatnie miejsce w rankingu, choć znajduje się na mozaice.
+
+\begin{figure}\centering
+\footnotesize
+\include{./results-1/graph}\vspace{-1.2em}
+\include{./results-2/graph}\vspace{-1.2em}
+\include{./results-3/graph}\vspace{.5em}
+\begin{tabular}{|l|ll|ll|ll|}\hline
+          & $E$       & $\sigma$ & $E$       & $\sigma$ & $E$       & $\sigma$ \\ \hline
+triangle1 &  0.247820 & 0.049523 &  1.645350 & 0.300826 &  1.410400 & 0.348985 \\
+square    &  0.577660 & 0.231402 &  3.331020 & 0.624010 &  2.016210 & 0.163243 \\
+circle    &  1.154680 & 0.640052 &  0.780480 & 0.183907 &  3.545210 & 0.569438 \\
+cross     &  2.152610 & 0.558528 &  6.724260 & 0.674194 &  0.550440 & 0.245758 \\
+clover    &  2.956400 & 0.598749 & 18.457290 & 1.613133 &  2.570660 & 0.383632 \\
+house     &  5.105800 & 1.453031 &  2.458250 & 0.548131 &  4.538930 & 0.866171 \\
+4star     & 11.956870 & 1.481512 & 14.383770 & 0.713879 &  8.272040 & 1.412373 \\
+balls     & 16.037650 & 2.846353 & 22.286540 & 2.188666 &  6.102030 & 1.197640 \\
+arch      & 24.902450 & 1.408058 & 15.960360 & 1.228021 & 16.190710 & 1.356077 \\
+5star     & 28.833450 & 1.262338 &  8.893930 & 0.851110 & 12.607730 & 1.629204 \\ \hline
+\end{tabular}
+\normalsize\caption{Analiza powtarzalności działania programu rozpoznającego mozaiki}\label{mosaic-results}
 \end{figure}
 
 \section{Uwagi implementacyjne}
