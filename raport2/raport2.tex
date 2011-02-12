@@ -324,13 +324,14 @@ tego maksimum lokalnego -- najprawdopodobniej dobrym rozwiązaniem okazałoby si
 
 \paragraph{Pojedyncze obrazki} Wyniki eksperymentów z programem rozpoznającym pojedyncze obrazki zebrano na rysunku \ref{single-results} (w tabeli pominięto znak minus przy
 wartości funkcji celu; mniejsze wartości oznaczają lepsze dopasowanie). Eksperymenty polegały na wykonaniu pięćdziesiąt razy porównania każdej pary obrazów z bazy owoców.
-Wiersze tabeli odpowiadają obrazkom podanym jako zapytanie, kolumny -- obrazkom wziętym z bazy danych. Jak widać, wyniki są poprawne (jedynie w przypadku gruszki program myli
-się i stwierdza, że jest najbardziej podobna do pomarańczy). W większości wypadków widać również wyraźną różnicę między dopasowaniami poprawnymi a błędnymi (dobrymi przykładami
-są jabłko, wisienki, ekstremalnym -- pomarańcza). Nieintuicyjnym może wydawać się fakt, że tabela nie jest symetryczna. Jest to jednak efekt oczekiawny, gdyż funkcja celu nie
-jest symetryczna. Bardzo dobrze widać to na przykładzie pomarańczy, która jest niemal idealnym kołem. Gdy pomarańcza występuje jako obrazek z bazy, otrzymywane dopasowania są
-bardzo dobre, natomiast gdy pomarańcza jest obrazkiem z zapytania, dopasowania inne niż do samej siebie mają olbrzymie wartości błędu. Jest tak, gdyż łatwo jest znaleźć okrągły
-kształt w większości z owoców, zatem odległość od pomarańczy do zapytania jest niewielka. Z drugiej strony bardzo trudno jest przekształcić nieregularne kształty tak, aby wszystkie
-ich punkty leżały na okręgu; dlatego odległość od innych owoców do pomarańczy jest znaczna.
+Wiersze tabeli odpowiadają obrazkom podanym jako zapytanie, kolumny -- obrazkom wziętym z bazy danych (należy pamiętać, że wyniki dla różnych zapytań są niewspółmierne; porównywać
+można tylko wielkości w jednym wierszu tabeli). Jak widać, wyniki są poprawne (jedynie w przypadku gruszki program myli się i stwierdza, że jest najbardziej podobna do pomarańczy).
+W większości wypadków widać również wyraźną różnicę między dopasowaniami poprawnymi a błędnymi (dobrymi przykładami są jabłko, wisienki, ekstremalnym -- pomarańcza). Nieintuicyjnym
+może wydawać się fakt, że tabela nie jest symetryczna. Jest to jednak efekt oczekiawny, gdyż funkcja celu nie jest symetryczna. Bardzo dobrze widać to na przykładzie pomarańczy,
+która jest niemal idealnym kołem. Gdy pomarańcza występuje jako obrazek z bazy, otrzymywane dopasowania są bardzo dobre, natomiast gdy pomarańcza jest obrazkiem z zapytania,
+dopasowania inne niż do samej siebie mają olbrzymie wartości błędu. Jest tak, gdyż łatwo jest znaleźć okrągły kształt w większości z owoców, zatem odległość od pomarańczy do
+zapytania jest niewielka. Z drugiej strony bardzo trudno jest przekształcić nieregularne kształty tak, aby wszystkie ich punkty leżały na okręgu; dlatego odległość od innych
+owoców do pomarańczy jest znaczna.
 
 \begin{figure}\centering
 \footnotesize
